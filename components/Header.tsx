@@ -11,9 +11,9 @@ const Header: React.FC<HeaderProps> = ({ user, title }) => {
   return (
     <header className="sticky top-0 z-30 w-full px-6 py-4 flex items-center justify-between bg-white/70 backdrop-blur-xl transition-all border-b border-black/[0.03]">
       <div className="flex-1">
-        {/* Mobile Title */}
-        <h1 className="text-xl font-bold tracking-tight text-slate-900 md:hidden">{title}</h1>
-        {/* Desktop Title */}
+        {/* Mobile Title: Always shows App Name */}
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 md:hidden">Melodia</h1>
+        {/* Desktop Title: Shows active Page Name */}
         <h2 className="hidden md:block text-2xl font-bold text-slate-900 tracking-tight">{title}</h2>
       </div>
 
