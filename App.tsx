@@ -31,6 +31,7 @@ const App: React.FC = () => {
   // Audio Player State
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession()
@@ -101,7 +102,11 @@ const App: React.FC = () => {
           style: s.style,
           createdAt: s.created_at,
           duration: s.duration,
-          coverImage: s.cover_image
+          coverImage: s.cover_image,
+          // Mapping des nouveaux champs (assurez-vous d'avoir fait la migration SQL si nécessaire)
+          // Pour l'instant on map sur des champs existants ou on suppose qu'ils existent
+          voiceInput: s.voice_input, // Nouveau champ DB
+          voiceMode: s.voice_mode // Nouveau champ DB
         }));
         setSongs(formattedSongs);
       }
@@ -113,6 +118,8 @@ const App: React.FC = () => {
   const handleSongCreated = async (newSong: Song) => {
     if (!session?.user) return;
 
+    // Attention: Il faut s'assurer que la table 'songs' a bien les colonnes 'voice_input' et 'voice_mode'
+    // Si elles n'existent pas encore en base, Supabase ignorera ces champs si on ne les a pas créés.
     const { error } = await supabase.from('songs').insert({
       user_id: session.user.id,
       title: newSong.title,
@@ -122,14 +129,14 @@ const App: React.FC = () => {
       style: newSong.style,
       duration: newSong.duration,
       cover_image: newSong.coverImage,
-      created_at: newSong.createdAt
+      created_at: newSong.createdAt,
+      voice_input: newSong.voiceInput || null,
+      voice_mode: newSong.voiceMode || null
     });
 
     if (error) console.error("Erreur sauvegarde chanson:", error);
 
     setSongs([newSong, ...songs]);
-    // Au lieu d'aller à la bibliothèque, on joue directement la musique
-    handlePlaySong(newSong);
   };
 
   const deductCoins = (amount: number) => {
@@ -164,6 +171,8 @@ const App: React.FC = () => {
     } else {
       setCurrentSong(song);
       setIsPlaying(true);
+      // Optionnel : Ouvrir le lecteur en plein écran automatiquement au lancement d'une nouvelle musique
+      // setIsPlayerExpanded(true); 
     }
   };
 
@@ -185,7 +194,6 @@ const App: React.FC = () => {
           <Create 
             onSongCreated={handleSongCreated} 
             deductCoins={deductCoins} 
-            // Create peut aussi déclencher la lecture
             onPlay={handlePlaySong}
           />
         );
@@ -250,10 +258,13 @@ const App: React.FC = () => {
         <PlayerBar 
           song={currentSong} 
           isPlaying={isPlaying} 
+          isExpanded={isPlayerExpanded}
+          onToggleExpand={() => setIsPlayerExpanded(!isPlayerExpanded)}
           onTogglePlay={() => setIsPlaying(!isPlaying)} 
           onClose={() => {
             setIsPlaying(false);
             setCurrentSong(null);
+            setIsPlayerExpanded(false);
           }}
         />
       )}
