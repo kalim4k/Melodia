@@ -3,7 +3,8 @@ import { GenerationParams } from "../types";
 const API_BASE = "https://api.kie.ai/api/v1";
 
 // CONFIGURATION DE LA CLÉ API
-const getApiKey = () => "ffc67aa92b32521540881121dab456dd";
+// Récupération depuis les variables d'environnement
+const getApiKey = () => process.env.KIE_API_KEY;
 
 interface SunoGenerateResponse {
   code: number;
@@ -55,7 +56,7 @@ async function pollTask(taskId: string): Promise<GeneratedMusic> {
     await new Promise(resolve => setTimeout(resolve, interval));
 
     try {
-        // CORRECTION: Utilisation de l'endpoint record-info documenté
+        // Utilisation de l'endpoint record-info
         const response = await fetch(`${API_BASE}/generate/record-info?taskId=${taskId}`, {
             headers: {
                 'Authorization': `Bearer ${apiKey}`
@@ -80,7 +81,7 @@ async function pollTask(taskId: string): Promise<GeneratedMusic> {
                     // On prend la première piste générée
                     const track = tracks[0];
                     
-                    // Vérification de sécurité si l'URL est vide (parfois arrive en FIRST_SUCCESS prématuré)
+                    // Vérification de sécurité
                     if (!track.audioUrl) continue;
 
                     return {
@@ -100,7 +101,6 @@ async function pollTask(taskId: string): Promise<GeneratedMusic> {
             // Si 'PENDING' ou 'TEXT_SUCCESS', on continue d'attendre
         }
     } catch (e: any) {
-        // On ne relance pas l'erreur tout de suite sauf si c'est une erreur critique
         if (e.message.includes("La génération a échoué")) throw e;
         console.warn("Polling en cours (tentative " + (i+1) + ")...", e);
     }
@@ -115,7 +115,9 @@ export const generateSunoMusic = async (params: {
   voice: 'male' | 'female';
 }): Promise<GeneratedMusic> => {
   const apiKey = getApiKey();
-  if (!apiKey) throw new Error("Clé API Suno manquante.");
+  if (!apiKey) {
+    throw new Error("Clé API manquante. Ajoutez KIE_API_KEY dans votre fichier .env");
+  }
 
   // Appel initial pour lancer la génération
   const response = await fetch(`${API_BASE}/generate`, {
