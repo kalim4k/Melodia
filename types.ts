@@ -14,6 +14,8 @@ export interface User {
   name: string;
   coins: number;
   avatar: string;
+  plan: 'gratuit' | 'premium';
+  joinedAt: string;
 }
 
 export enum NavItem {
