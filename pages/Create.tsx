@@ -2,25 +2,23 @@ import React, { useState } from 'react';
 import { GenerationParams, Song } from '../types';
 import { generateLyrics } from '../services/geminiService';
 import { generateSunoMusic } from '../services/sunoService';
-import { Wand2, Play, Pause, ChevronRight, ChevronLeft, Mic, Music, Edit3, Check, Loader2 } from 'lucide-react';
+import { Wand2, Play, ChevronRight, ChevronLeft, Music, Edit3, Check, Loader2 } from 'lucide-react';
 
 interface CreateProps {
   onSongCreated: (song: Song) => void;
   deductCoins: (amount: number) => boolean;
+  onPlay?: (song: Song) => void;
 }
 
 type WizardStep = 'names' | 'style' | 'content' | 'lyrics-review' | 'final-result';
 
-const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins }) => {
+const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) => {
   const [currentStep, setCurrentStep] = useState<WizardStep>('names');
   const [loading, setLoading] = useState(false);
   const [loadingText, setLoadingText] = useState('');
   
   const [generatedSong, setGeneratedSong] = useState<Song | null>(null);
   const [generatedLyricsData, setGeneratedLyricsData] = useState<{ title: string; lyrics: string } | null>(null);
-  
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<GenerationParams>({
@@ -99,7 +97,7 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins }) => {
     setLoadingText('Composition musicale par IA (1-2 min)...');
     
     try {
-      // Utilisation du nouveau service Suno
+      // Utilisation du service Suno
       const sunoResult = await generateSunoMusic({
         lyrics: generatedLyricsData.lyrics,
         style: `${formData.vibe} ${formData.musicStyle}`,
@@ -120,30 +118,16 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins }) => {
       };
 
       setGeneratedSong(newSong);
-      onSongCreated(newSong);
+      onSongCreated(newSong); // Ceci déclenchera la lecture auto dans App.tsx si configuré
       setCurrentStep('final-result');
+      
+      // Sécurité : si onPlay est passé, on lance la lecture explicite
+      if (onPlay) onPlay(newSong);
     } catch (err) {
       console.error(err);
       setError("Erreur lors de la génération musicale. Réessayez plus tard.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const toggleAudio = () => {
-    if (!audioRef && generatedSong?.audioUrl) {
-      const audio = new Audio(generatedSong.audioUrl);
-      audio.onended = () => setIsPlaying(false);
-      setAudioRef(audio);
-      audio.play();
-      setIsPlaying(true);
-    } else if (audioRef) {
-      if (isPlaying) {
-        audioRef.pause();
-      } else {
-        audioRef.play();
-      }
-      setIsPlaying(!isPlaying);
     }
   };
 
@@ -187,7 +171,6 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins }) => {
         <div className="bg-white rounded-[2.5rem] p-6 shadow-ios text-center mb-6">
           <div className="relative w-64 h-64 mx-auto rounded-3xl overflow-hidden shadow-2xl shadow-rose-200 mb-8">
             <img src={generatedSong.coverImage} alt="Cover" className="w-full h-full object-cover" />
-            {/* Vinyl effect shine */}
             <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div>
           </div>
           
@@ -195,18 +178,13 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins }) => {
           <p className="text-rose-500 font-medium mb-8">Pour {generatedSong.recipient}</p>
 
           <div className="flex items-center justify-center gap-6">
-             <button className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 active:scale-95 transition-all">
-                <ChevronLeft size={24} />
-             </button>
+             {/* Note: La lecture se fait via la PlayerBar globale maintenant */}
              <button 
-                onClick={toggleAudio}
-                className="w-20 h-20 rounded-full bg-rose-500 flex items-center justify-center text-white shadow-xl shadow-rose-500/40 active:scale-95 transition-all hover:bg-rose-600"
+                onClick={() => onPlay && onPlay(generatedSong)}
+                className="w-20 h-20 rounded-full bg-rose-500 flex items-center justify-center text-white shadow-xl shadow-rose-500/40 active:scale-95 transition-all hover:bg-rose-600 animate-pulse"
               >
-                {isPlaying ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
+                <Play size={32} fill="currentColor" className="ml-1" />
               </button>
-              <button className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 active:scale-95 transition-all">
-                <ChevronRight size={24} />
-             </button>
           </div>
           
           <div className="mt-6 flex justify-center">

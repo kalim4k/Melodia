@@ -1,38 +1,67 @@
 import React from 'react';
 import { Song } from '../types';
-import { Play, Calendar, Heart, Download, MoreHorizontal, Music } from 'lucide-react';
+import { Play, Pause, MoreHorizontal, Music } from 'lucide-react';
 
 interface MyMusicProps {
   songs: Song[];
+  onPlay: (song: Song) => void;
+  currentSongId?: string;
+  isPlaying?: boolean;
 }
 
-const MyMusic: React.FC<MyMusicProps> = ({ songs }) => {
+const MyMusic: React.FC<MyMusicProps> = ({ songs, onPlay, currentSongId, isPlaying }) => {
   return (
-    <div className="pb-28">
+    <div className="pb-28 animate-fade-in">
       <h1 className="text-3xl font-bold text-slate-900 mb-6 tracking-tight">Bibliothèque</h1>
 
       <div className="space-y-3">
-        {songs.map((song) => (
-          <div key={song.id} className="bg-white rounded-3xl p-3 flex items-center gap-4 shadow-sm active:scale-[0.99] transition-transform">
-            <div className="relative w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-slate-200 shadow-inner">
-              <img src={song.coverImage} alt={song.title} className="w-full h-full object-cover" />
-            </div>
-            
-            <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-slate-900 text-lg truncate leading-tight">{song.title}</h3>
-              <p className="text-slate-500 text-sm truncate">Pour <span className="text-rose-500 font-semibold">{song.recipient}</span></p>
-            </div>
+        {songs.map((song) => {
+          const isCurrent = currentSongId === song.id;
+          const isActivePlaying = isCurrent && isPlaying;
 
-            <div className="flex items-center gap-1 pr-2">
-               <button className="w-10 h-10 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-rose-500 transition-colors">
-                <Play size={20} fill="currentColor" />
-              </button>
-              <button className="w-10 h-10 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 transition-colors">
-                <MoreHorizontal size={20} />
-              </button>
+          return (
+            <div 
+              key={song.id} 
+              onClick={() => onPlay(song)}
+              className={`group rounded-3xl p-3 flex items-center gap-4 shadow-sm active:scale-[0.99] transition-all cursor-pointer ${
+                isCurrent ? 'bg-rose-50 ring-1 ring-rose-200' : 'bg-white hover:shadow-md'
+              }`}
+            >
+              <div className="relative w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0 bg-slate-200 shadow-inner">
+                <img src={song.coverImage} alt={song.title} className="w-full h-full object-cover" />
+                
+                {/* Overlay si la chanson est en cours */}
+                {isCurrent && (
+                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                    <div className="w-3 bar-1 bg-white h-3 animate-bounce mx-[1px]"></div>
+                    <div className="w-3 bar-2 bg-white h-5 animate-bounce mx-[1px] delay-75"></div>
+                    <div className="w-3 bar-3 bg-white h-2 animate-bounce mx-[1px] delay-150"></div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <h3 className={`font-bold text-lg truncate leading-tight ${isCurrent ? 'text-rose-600' : 'text-slate-900'}`}>
+                  {song.title}
+                </h3>
+                <p className="text-slate-500 text-sm truncate">Pour <span className="text-rose-500 font-semibold">{song.recipient}</span></p>
+              </div>
+
+              <div className="flex items-center gap-1 pr-2">
+                 <button 
+                  className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${
+                    isCurrent ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' : 'text-slate-400 hover:bg-slate-50 hover:text-rose-500'
+                  }`}
+                >
+                  {isActivePlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+                </button>
+                <button className="w-10 h-10 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 transition-colors">
+                  <MoreHorizontal size={20} />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {songs.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 text-center">

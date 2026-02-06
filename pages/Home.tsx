@@ -6,9 +6,10 @@ interface HomeProps {
   user: User;
   recentSongs: Song[];
   goToCreate: () => void;
+  onPlay: (song: Song) => void;
 }
 
-const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate }) => {
+const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate, onPlay }) => {
   return (
     <div className="pb-32 animate-fade-in">
       
@@ -20,28 +21,22 @@ const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate }) => {
             <span className="text-slate-400 font-medium">{user.name.split(' ')[0]}</span>
           </h1>
           <div className="w-12 h-12 rounded-full bg-white border border-slate-100 shadow-sm flex items-center justify-center">
-            <span className="text-2xl"></span>
+            <span className="text-2xl">👋</span>
           </div>
         </div>
       </div>
 
-      {/* Hero Card - Style "Pro / Dark Mode" */}
-      {/* Hauteur réduite : aspect-[4/3] au lieu de [4/5] sur mobile */}
+      {/* Hero Card */}
       <div 
         onClick={goToCreate}
         className="group relative w-full aspect-[4/3] md:aspect-[2.8/1] rounded-[2rem] overflow-hidden shadow-2xl shadow-slate-200 cursor-pointer transition-all duration-500 hover:shadow-slate-300 mb-10"
       >
-        {/* Background Image: Abstract/Premium */}
         <img 
           src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=2000&auto=format&fit=crop" 
           alt="Create" 
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 brightness-[0.7]" 
         />
-        
-        {/* Subtle Gradient Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-90"></div>
-
-        {/* Content */}
         <div className="absolute inset-0 p-6 md:p-10 flex flex-col justify-between">
           <div className="flex justify-between items-start">
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-xl border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest shadow-sm">
@@ -79,9 +74,7 @@ const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate }) => {
           )}
         </div>
 
-        {/* Horizontal Scroll Container (iOS style) */}
         {recentSongs.length === 0 ? (
-          // Empty State - Épuré
           <div className="py-8 text-center flex flex-col items-center">
             <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center mb-3 text-slate-300">
               <Music size={22} />
@@ -89,18 +82,16 @@ const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate }) => {
             <p className="text-slate-400 text-sm font-medium">Aucune création récente</p>
           </div>
         ) : (
-          // Song Cards Horizontal Scroll
           <div className="flex gap-5 overflow-x-auto pb-6 px-2 scrollbar-hide snap-x">
             {recentSongs.map((song) => (
               <div 
                 key={song.id} 
                 className="group relative flex-none w-40 snap-start cursor-pointer"
+                onClick={() => onPlay(song)} // Activation du lecteur au clic
               >
-                {/* Cover Image */}
                 <div className="relative aspect-square rounded-[1.5rem] overflow-hidden mb-3 shadow-lg shadow-slate-100 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1 bg-slate-100">
                   <img src={song.coverImage} alt={song.title} className="w-full h-full object-cover" />
                   
-                  {/* Play Overlay - Minimalist */}
                   <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                     <div className="w-12 h-12 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
                       <Play size={18} className="ml-1 text-slate-900" fill="currentColor" />
@@ -108,7 +99,6 @@ const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate }) => {
                   </div>
                 </div>
 
-                {/* Info */}
                 <div className="space-y-1 px-1">
                   <h3 className="font-bold text-slate-900 truncate text-sm leading-tight">
                     {song.title}
@@ -120,7 +110,6 @@ const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate }) => {
               </div>
             ))}
             
-            {/* "More" Card at the end of scroll */}
              <div 
                 onClick={goToCreate}
                 className="flex-none w-40 aspect-square rounded-[1.5rem] bg-slate-50 border border-slate-100 flex flex-col items-center justify-center gap-3 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all cursor-pointer snap-start group"
@@ -134,7 +123,6 @@ const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate }) => {
         )}
       </div>
 
-      {/* Footer CTA Button */}
       <div className="mt-8 px-2">
          <button 
            onClick={goToCreate}

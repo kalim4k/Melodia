@@ -9,8 +9,9 @@ import MyMusic from './pages/MyMusic';
 import CoinsPage from './pages/Coins';
 import Profile from './pages/Profile';
 import Auth from './pages/Auth';
-import Landing from './pages/Landing'; // Import de la Landing Page
+import Landing from './pages/Landing';
 import BackgroundAnimation from './components/BackgroundAnimation';
+import PlayerBar from './components/PlayerBar';
 import { NavItem, Song, User } from './types';
 
 const App: React.FC = () => {
@@ -20,21 +21,25 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
   
-  // État pour gérer l'affichage entre Landing et Auth
+  // Auth State
   const [showAuth, setShowAuth] = useState(false);
   
+  // Data State
   const [user, setUser] = useState<User | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
 
+  // Audio Player State
+  const [currentSong, setCurrentSong] = useState<Song | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
   useEffect(() => {
-    // Gestion de la session Supabase
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
         setSession(session);
         if (session) fetchUserData(session.user.id);
       })
       .catch((err) => {
-        console.warn("Erreur lors de la récupération de la session:", err);
+        console.warn("Erreur session:", err);
       })
       .finally(() => {
         setLoadingInitial(false);
@@ -46,9 +51,10 @@ const App: React.FC = () => {
       setSession(session);
       if (session) {
         fetchUserData(session.user.id);
-        setShowAuth(false); // Reset landing state on login
+        setShowAuth(false);
       } else {
         setUser(null);
+        setCurrentSong(null); // Stop music on logout
       }
     });
 
@@ -63,7 +69,6 @@ const App: React.FC = () => {
 
   const fetchUserData = async (userId: string) => {
     try {
-      // 1. Récupérer le profil
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
@@ -75,12 +80,11 @@ const App: React.FC = () => {
           name: profile.name,
           coins: profile.coins,
           avatar: profile.avatar_url || 'https://picsum.photos/seed/user123/200/200',
-          plan: 'gratuit', // Par défaut 'gratuit', passera en 'premium' via logique d'achat future
+          plan: 'gratuit',
           joinedAt: profile.created_at || new Date().toISOString()
         });
       }
 
-      // 2. Récupérer les chansons
       const { data: userSongs } = await supabase
         .from('songs')
         .select('*')
@@ -88,7 +92,6 @@ const App: React.FC = () => {
         .order('created_at', { ascending: false });
 
       if (userSongs) {
-        // Transformation des noms de colonnes (snake_case DB -> camelCase App)
         const formattedSongs: Song[] = userSongs.map(s => ({
           id: s.id,
           title: s.title,
@@ -103,14 +106,13 @@ const App: React.FC = () => {
         setSongs(formattedSongs);
       }
     } catch (error) {
-      console.error("Erreur chargement données utilisateur:", error);
+      console.error("Erreur chargement:", error);
     }
   };
 
   const handleSongCreated = async (newSong: Song) => {
     if (!session?.user) return;
 
-    // Sauvegarder dans Supabase
     const { error } = await supabase.from('songs').insert({
       user_id: session.user.id,
       title: newSong.title,
@@ -123,13 +125,11 @@ const App: React.FC = () => {
       created_at: newSong.createdAt
     });
 
-    if (error) {
-      console.error("Erreur sauvegarde chanson:", error);
-      // On ajoute quand même localement pour l'UX
-    }
+    if (error) console.error("Erreur sauvegarde chanson:", error);
 
     setSongs([newSong, ...songs]);
-    setActiveTab(NavItem.MY_MUSIC);
+    // Au lieu d'aller à la bibliothèque, on joue directement la musique
+    handlePlaySong(newSong);
   };
 
   const deductCoins = (amount: number) => {
@@ -137,11 +137,7 @@ const App: React.FC = () => {
     
     if (user.coins >= amount) {
       const newBalance = user.coins - amount;
-      
-      // Mise à jour optimiste UI
       setUser({ ...user, coins: newBalance });
-
-      // Mise à jour DB
       supabase
         .from('profiles')
         .update({ coins: newBalance })
@@ -149,7 +145,6 @@ const App: React.FC = () => {
         .then(({ error }) => {
           if (error) console.error("Erreur mise à jour pièces:", error);
         });
-
       return true;
     }
     return false;
@@ -159,7 +154,17 @@ const App: React.FC = () => {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
-    // Le listener onAuthStateChange gérera le reste, mais on reset l'état local pour être sûr
+    setCurrentSong(null);
+  };
+
+  // --- AUDIO PLAYER LOGIC ---
+  const handlePlaySong = (song: Song) => {
+    if (currentSong?.id === song.id) {
+      setIsPlaying(!isPlaying);
+    } else {
+      setCurrentSong(song);
+      setIsPlaying(true);
+    }
   };
 
   const renderContent = () => {
@@ -167,17 +172,38 @@ const App: React.FC = () => {
 
     switch (activeTab) {
       case NavItem.HOME:
-        return <Home user={user} recentSongs={songs.slice(0, 3)} goToCreate={() => setActiveTab(NavItem.CREATE)} />;
+        return (
+          <Home 
+            user={user} 
+            recentSongs={songs.slice(0, 5)} 
+            goToCreate={() => setActiveTab(NavItem.CREATE)} 
+            onPlay={handlePlaySong}
+          />
+        );
       case NavItem.CREATE:
-        return <Create onSongCreated={handleSongCreated} deductCoins={deductCoins} />;
+        return (
+          <Create 
+            onSongCreated={handleSongCreated} 
+            deductCoins={deductCoins} 
+            // Create peut aussi déclencher la lecture
+            onPlay={handlePlaySong}
+          />
+        );
       case NavItem.MY_MUSIC:
-        return <MyMusic songs={songs} />;
+        return (
+          <MyMusic 
+            songs={songs} 
+            onPlay={handlePlaySong}
+            currentSongId={currentSong?.id}
+            isPlaying={isPlaying}
+          />
+        );
       case NavItem.COINS:
         return <CoinsPage user={user} />;
       case NavItem.PROFILE:
         return <Profile user={user} onLogout={handleLogout} onNavigate={setActiveTab} />;
       default:
-        return <Home user={user} recentSongs={songs} goToCreate={() => setActiveTab(NavItem.CREATE)} />;
+        return null;
     }
   };
 
@@ -192,19 +218,13 @@ const App: React.FC = () => {
     }
   };
 
-  if (loadingInitial) {
-    return <div className="h-screen w-full flex items-center justify-center bg-slate-50 text-rose-500">Chargement...</div>;
-  }
+  if (loadingInitial) return <div className="h-screen w-full flex items-center justify-center bg-slate-50 text-rose-500">Chargement...</div>;
 
-  // --- LOGIQUE D'AFFICHAGE NON-CONNECTÉ ---
   if (!session) {
-    if (showAuth) {
-      return <Auth onBack={() => setShowAuth(false)} />;
-    }
+    if (showAuth) return <Auth onBack={() => setShowAuth(false)} />;
     return <Landing onStart={() => setShowAuth(true)} />;
   }
 
-  // Calcul dynamique de la marge
   const mainMargin = !isMobile ? (isSidebarCollapsed ? 'ml-20' : 'ml-72') : '';
 
   return (
@@ -220,10 +240,23 @@ const App: React.FC = () => {
       
       <main className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ease-in-out z-10 ${mainMargin}`}>
         {user && <Header user={user} title={getPageTitle()} />}
-        <div className="flex-1 px-4 md:px-8 pt-6 max-w-7xl mx-auto w-full relative">
+        <div className="flex-1 px-4 md:px-8 pt-6 max-w-7xl mx-auto w-full relative pb-32">
           {renderContent()}
         </div>
       </main>
+
+      {/* Global Player Bar */}
+      {currentSong && (
+        <PlayerBar 
+          song={currentSong} 
+          isPlaying={isPlaying} 
+          onTogglePlay={() => setIsPlaying(!isPlaying)} 
+          onClose={() => {
+            setIsPlaying(false);
+            setCurrentSong(null);
+          }}
+        />
+      )}
     </div>
   );
 };
