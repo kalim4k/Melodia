@@ -30,5 +30,7 @@ export type Tables = {
     style: string;
     duration: string;
     created_at: string;
+    voice_input?: string | null;
+    voice_mode?: string | null;
   };
 };

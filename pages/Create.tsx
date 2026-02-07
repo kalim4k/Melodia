@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { GenerationParams, Song } from '../types';
 import { generateLyrics } from '../services/geminiService';
 import { generateSunoMusic } from '../services/sunoService';
-import { Wand2, Play, Pause, ChevronRight, ChevronLeft, Music, Edit3, Check, Loader2, Download, Image as ImageIcon, Upload, X, Mic, StopCircle, Trash2, Info } from 'lucide-react';
+import { Wand2, Play, Pause, ChevronRight, ChevronLeft, Music, Edit3, Check, Loader2, Download, Image as ImageIcon, Upload, X, Mic, StopCircle, Trash2, Info, Share2 } from 'lucide-react';
 
 interface CreateProps {
   onSongCreated: (song: Song) => void;
@@ -37,10 +37,13 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
 
   // Audio Player State for Result View
   const audioRef = useRef<HTMLAudioElement>(null);
+  const voiceRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playingDedication, setPlayingDedication] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState('0:00');
   const [duration, setDuration] = useState('0:00');
+  const [showShareTooltip, setShowShareTooltip] = useState(false);
 
   const [formData, setFormData] = useState<GenerationParams>({
     sender: '',
@@ -75,7 +78,7 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
     { id: 'slam', label: 'Slam' },
   ];
 
-  // Gestion de l'upload d'image (Preview + Stockage File)
+  // Gestion de l'upload d'image
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -130,7 +133,7 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
         });
       }, 1000);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erreur micro:", err);
       setError("Impossible d'accéder au micro. Vérifiez les permissions.");
     }
@@ -184,33 +187,58 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
     }
   };
 
-  // Player Logic
+  // --- RESULT PLAYER LOGIC (With Dedication Support) ---
+  
+  // Initialize state when song is generated
+  useEffect(() => {
+    if (generatedSong && currentStep === 'final-result') {
+      const hasDedication = generatedSong.voiceInput && generatedSong.voiceMode === 'dedication';
+      setPlayingDedication(!!hasDedication);
+    }
+  }, [generatedSong, currentStep]);
+
   const togglePlay = () => {
-    if (audioRef.current) {
+    const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
+    
+    if (activeAudio) {
       if (isPlaying) {
-        audioRef.current.pause();
+        activeAudio.pause();
+        // Si on est en dédicace, on pause aussi la musique par sécurité
+        if (playingDedication && audioRef.current) audioRef.current.pause();
       } else {
-        audioRef.current.play();
+        activeAudio.play().catch(e => console.error("Erreur lecture", e));
       }
       setIsPlaying(!isPlaying);
     }
   };
 
   const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      const current = audioRef.current.currentTime;
-      const dur = audioRef.current.duration || 1;
+    const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
+
+    if (activeAudio) {
+      const current = activeAudio.currentTime;
+      const dur = activeAudio.duration || 1;
       setProgress((current / dur) * 100);
       
       const mins = Math.floor(current / 60);
       const secs = Math.floor(current % 60);
       setCurrentTime(`${mins}:${secs.toString().padStart(2, '0')}`);
       
-      if (!isNaN(audioRef.current.duration)) {
-        const dMins = Math.floor(audioRef.current.duration / 60);
-        const dSecs = Math.floor(audioRef.current.duration % 60);
+      if (!isNaN(activeAudio.duration)) {
+        const dMins = Math.floor(activeAudio.duration / 60);
+        const dSecs = Math.floor(activeAudio.duration % 60);
         setDuration(`${dMins}:${dSecs.toString().padStart(2, '0')}`);
       }
+    }
+  };
+
+  // Transition Dédicace -> Musique
+  const handleVoiceEnded = () => {
+    console.log("Fin de la dédicace, lancement musique...");
+    setPlayingDedication(false);
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(e => console.error("Erreur lecture musique auto", e));
     }
   };
 
@@ -218,9 +246,28 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
     setIsPlaying(false);
     setProgress(0);
     setCurrentTime('0:00');
+    // Reset sequence logic for next play
+    const hasDedication = generatedSong?.voiceInput && generatedSong?.voiceMode === 'dedication';
+    if (hasDedication) setPlayingDedication(true);
   };
 
-  // Navigation
+  // Fonction de partage
+  const handleShare = async () => {
+    if (!generatedSong) return;
+    
+    // Création du lien public (basé sur l'URL actuelle + paramètre query)
+    const shareUrl = `${window.location.origin}?share=${generatedSong.id}`;
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShowShareTooltip(true);
+      setTimeout(() => setShowShareTooltip(false), 2000);
+    } catch (err) {
+      console.error("Erreur copie", err);
+    }
+  };
+
+  // Navigation handlers...
   const nextStep = () => {
     setError(null);
     if (currentStep === 'names') {
@@ -269,35 +316,32 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
       return;
     }
     setLoading(true);
-    setLoadingText('Composition musicale par IA (1-2 min)...');
     
     try {
-      // 1. Upload des fichiers (Cover et Audio)
       let finalCover = null;
       let finalVoiceUrl = null;
 
       if (coverFile) {
+        setLoadingText('Envoi de la pochette...');
         finalCover = await uploadFileToSupabase(coverFile, 'covers', coverFile.name.split('.').pop());
       }
 
       if (formData.voiceInputBlob) {
-        setLoadingText('Sauvegarde de votre voix...');
+        setLoadingText('Envoi de votre voix...');
         finalVoiceUrl = await uploadFileToSupabase(formData.voiceInputBlob, 'audio-inputs', 'mp3');
       }
 
       setLoadingText('Composition musicale par IA (1-2 min)...');
 
-      // 2. Lancer la génération musicale
       const sunoResult = await generateSunoMusic({
         lyrics: generatedLyricsData.lyrics,
         style: `${formData.vibe} ${formData.musicStyle}`,
         title: generatedLyricsData.title,
-        voice: formData.voice
-        // Note: On pourrait passer l'audio ici pour l'inspiration, mais l'API est stricte.
-        // On stocke l'URL dans l'objet Song pour l'usage "Dédicace".
+        voice: formData.voice,
+        audioInput: finalVoiceUrl || undefined,
+        voiceMode: formData.voiceMode
       });
 
-      // Si pas de cover custom, on prend celle de Suno
       if (!finalCover) finalCover = sunoResult.coverImage;
 
       const newSong: Song = {
@@ -373,16 +417,26 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
           </div>
 
           <div className="bg-slate-900 rounded-[2rem] p-5 text-white shadow-xl shadow-slate-200">
+            {/* Lecteur Audio Principal */}
             <audio 
               ref={audioRef}
               src={generatedSong.audioUrl}
-              onTimeUpdate={handleTimeUpdate}
+              onTimeUpdate={!playingDedication ? handleTimeUpdate : undefined}
               onEnded={handleAudioEnded}
-              onLoadedMetadata={handleTimeUpdate}
+              onLoadedMetadata={!playingDedication ? handleTimeUpdate : undefined}
             />
+            {/* Lecteur Dédicace (Voix) */}
+            {generatedSong.voiceInput && generatedSong.voiceMode === 'dedication' && (
+              <audio 
+                ref={voiceRef}
+                src={generatedSong.voiceInput}
+                onEnded={handleVoiceEnded}
+                onTimeUpdate={playingDedication ? handleTimeUpdate : undefined}
+              />
+            )}
 
             <div className="flex items-center gap-4 mb-6">
-              <div className="w-16 h-16 rounded-xl bg-slate-800 overflow-hidden flex-shrink-0 border border-white/10">
+              <div className="w-16 h-16 rounded-xl bg-slate-800 overflow-hidden flex-shrink-0 border border-white/10 relative">
                 <img 
                   src={generatedSong.coverImage || fallbackImage} 
                   alt="Cover" 
@@ -391,42 +445,55 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
                     (e.target as HTMLImageElement).src = fallbackImage;
                   }}
                 />
+                {playingDedication && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <Mic size={24} className="text-white animate-bounce" />
+                  </div>
+                )}
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-lg truncate leading-tight">{generatedSong.title}</h3>
+                <h3 className="font-bold text-lg truncate leading-tight">
+                    {playingDedication ? 'Intro Vocale...' : generatedSong.title}
+                </h3>
                 <p className="text-rose-400 text-sm font-medium">{generatedSong.style}</p>
               </div>
             </div>
 
             <div className="mb-2 flex items-center justify-between text-xs text-slate-400 font-medium">
               <span>{currentTime}</span>
-              <span>{duration !== '0:00' ? duration : generatedSong.duration}</span>
+              <span>{playingDedication ? '-' : (duration !== '0:00' ? duration : generatedSong.duration)}</span>
             </div>
+            
             <div className="relative h-2 bg-white/10 rounded-full overflow-hidden mb-6 cursor-pointer" onClick={(e) => {
-               if(audioRef.current) {
+               const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
+               if(activeAudio) {
                  const rect = e.currentTarget.getBoundingClientRect();
                  const x = e.clientX - rect.left;
                  const percent = x / rect.width;
-                 audioRef.current.currentTime = percent * (audioRef.current.duration || 0);
+                 activeAudio.currentTime = percent * (activeAudio.duration || 0);
                }
             }}>
               <div 
-                className="absolute top-0 left-0 h-full bg-rose-500 rounded-full transition-all duration-100 ease-linear"
+                className={`absolute top-0 left-0 h-full rounded-full transition-all duration-100 ease-linear ${playingDedication ? 'bg-indigo-500' : 'bg-rose-500'}`}
                 style={{ width: `${progress}%` }}
               ></div>
             </div>
 
             <div className="flex items-center justify-between">
-              <a 
-                href={generatedSong.audioUrl} 
-                download
-                target="_blank"
-                rel="noreferrer"
-                className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                title="Télécharger"
-              >
-                <Download size={20} />
-              </a>
+              <div className="relative">
+                <button 
+                    onClick={handleShare}
+                    className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                    title="Partager le lien public"
+                >
+                    <Share2 size={20} />
+                </button>
+                {showShareTooltip && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-black text-white text-xs py-1 px-2 rounded whitespace-nowrap">
+                    Lien copié !
+                  </div>
+                )}
+              </div>
 
               <button 
                 onClick={togglePlay}
@@ -435,20 +502,16 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
                 {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" className="ml-1" />}
               </button>
 
-              <button 
+              <a 
+                href={generatedSong.audioUrl} 
+                download
+                target="_blank"
+                rel="noreferrer"
                 className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                onClick={() => {
-                  setGeneratedSong(null);
-                  setCurrentStep('names');
-                  setFormData({...formData, recipient: '', details: '', customCover: null, voiceInputBlob: null});
-                  setCoverFile(null);
-                  setAudioUrl(null);
-                  setIsPlaying(false);
-                }}
-                title="Recommencer"
+                title="Télécharger MP3 (Musique seule)"
               >
-                <Wand2 size={20} />
-              </button>
+                <Download size={20} />
+              </a>
             </div>
           </div>
 
@@ -470,6 +533,7 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
               setCoverFile(null);
               setAudioUrl(null);
               setIsPlaying(false);
+              setPlayingDedication(false);
             }}
             className="pointer-events-auto bg-slate-900 text-white px-8 py-4 rounded-full font-bold shadow-lg active:scale-95 transition-transform"
           >
@@ -480,7 +544,7 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
     );
   }
 
-  // Wizard Steps
+  // Wizard Steps (Names, Style, Content...)
   return (
     <div className="max-w-xl mx-auto pb-32">
       <div className="text-center mb-8 pt-4">
@@ -519,7 +583,7 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
 
         {/* STEP 2: Style */}
         {currentStep === 'style' && (
-          <div className="flex-1 space-y-8 animate-fade-in">
+           <div className="flex-1 space-y-8 animate-fade-in">
             {/* Styles Musicaux */}
             <div>
               <label className="block text-sm font-bold text-slate-500 uppercase tracking-wide mb-4 pl-1">Style Musical</label>
@@ -595,13 +659,12 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
                 </label>
               )}
             </div>
-
           </div>
         )}
 
         {/* STEP 3: Content (Lyrics + Voice) */}
         {currentStep === 'content' && (
-          <div className="flex-1 space-y-8 animate-fade-in">
+           <div className="flex-1 space-y-8 animate-fade-in">
              <div>
                <label className="block text-sm font-bold text-slate-500 uppercase tracking-wide mb-4 pl-1">Voix Chantée</label>
                <div className="bg-slate-100 p-1 rounded-full flex relative">
@@ -665,9 +728,9 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
                <div className="flex gap-2 text-xs text-slate-500 mb-4 bg-white/50 p-3 rounded-xl">
                  <Info size={14} className="flex-shrink-0 mt-0.5" />
                  {formData.voiceMode === 'dedication' ? (
-                   <p>Enregistrez un message (ex: "Je t'aime Marie") qui sera joué <span className="font-bold">avant</span> le début de la musique.</p>
+                   <p><span className="font-bold">Message vocal :</span> Joué tel quel AVANT la musique. L'IA n'utilise pas cet audio pour la composition.</p>
                  ) : (
-                   <p>Fredonnez une mélodie pendant 10s. L'IA s'en inspirera pour créer la musique (Expérimental).</p>
+                   <p><span className="font-bold">Inspiration IA :</span> Fredonnez 10s. L'IA utilise la mélodie pour composer. (Note: Ce n'est pas du clonage de voix parfait).</p>
                  )}
                </div>
 

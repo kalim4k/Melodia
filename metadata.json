@@ -1,5 +1,7 @@
 {
   "name": "Melodia",
   "description": "Une application web pour générer des sérénades et musiques personnalisées pour la Saint-Valentin via l'IA.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }

@@ -11,10 +11,10 @@ interface HomeProps {
 
 const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate, onPlay }) => {
   return (
-    <div className="pb-32 animate-fade-in">
+    <div className="pb-32 animate-fade-in w-full max-w-4xl mx-auto">
       
       {/* Header Section style "Editorial Premium" */}
-      <div className="mb-8 px-2 pt-6">
+      <div className="mb-8 pt-4 md:pt-6">
         <div className="flex items-center justify-between">
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight leading-tight">
             Bonjour, <br/>
@@ -63,7 +63,7 @@ const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate, onPlay }) =>
 
       {/* Recent Songs Section */}
       <div className="space-y-6">
-        <div className="flex items-end justify-between px-2 border-b border-slate-100 pb-4">
+        <div className="flex items-end justify-between border-b border-slate-100 pb-4">
           <h2 className="text-lg font-bold text-slate-900 tracking-tight">
             Bibliothèque
           </h2>
@@ -82,7 +82,7 @@ const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate, onPlay }) =>
             <p className="text-slate-400 text-sm font-medium">Aucune création récente</p>
           </div>
         ) : (
-          <div className="flex gap-5 overflow-x-auto pb-6 px-2 scrollbar-hide snap-x">
+          <div className="flex gap-5 overflow-x-auto pb-6 scrollbar-hide snap-x -mx-4 px-4 md:mx-0 md:px-0">
             {recentSongs.map((song) => (
               <div 
                 key={song.id} 
@@ -123,7 +123,7 @@ const Home: React.FC<HomeProps> = ({ user, recentSongs, goToCreate, onPlay }) =>
         )}
       </div>
 
-      <div className="mt-8 px-2">
+      <div className="mt-8">
          <button 
            onClick={goToCreate}
            className="w-full bg-slate-900 rounded-[2rem] p-4 flex items-center justify-between shadow-lg shadow-slate-200 group active:scale-[0.98] transition-all hover:bg-black"

@@ -121,6 +121,8 @@ export const generateSunoMusic = async (params: {
   style: string;
   title: string;
   voice: 'male' | 'female';
+  audioInput?: string; // URL de l'audio pour inspiration
+  voiceMode?: 'dedication' | 'inspiration';
 }): Promise<GeneratedMusic> => {
   const apiKey = getApiKey();
   
@@ -130,9 +132,41 @@ export const generateSunoMusic = async (params: {
 
   console.log("[Suno] Envoi de la requête de génération...", {
     style: fullStyle,
-    title: params.title
+    title: params.title,
+    hasAudioInput: !!params.audioInput,
+    voiceMode: params.voiceMode
   });
   
+  const payload: any = {
+    customMode: true,
+    callBackUrl: "https://google.com", // Dummy URL obligatoire
+    instrumental: false,
+    model: 'V3_5', 
+    
+    // Modèle et contenu
+    mv: 'chirp-v3-5', 
+    title: params.title.substring(0, 80),
+    prompt: params.lyrics.substring(0, 2000), 
+    
+    // Style
+    tags: fullStyle,
+    style: fullStyle 
+  };
+
+  // LOGIQUE CRITIQUE :
+  // 1. DEDICATION : On n'envoie PAS l'audio à Suno. Le frontend le jouera avant la chanson.
+  // 2. INSPIRATION : On envoie l'audio à Suno pour qu'il s'en inspire (continue_clip / audio_prompt).
+  
+  if (params.voiceMode === 'inspiration' && params.audioInput) {
+    console.log("[Suno] Mode Inspiration activé : Utilisation de l'audio comme prompt.");
+    payload.audio_prompt_url = params.audioInput;
+    // continue_at indique à Suno où commencer à générer après le prompt. 
+    // Si absent, Suno gère généralement l'extension intelligemment.
+  } else if (params.voiceMode === 'dedication' && params.audioInput) {
+    console.log("[Suno] Mode Dédicace : L'audio est ignoré par l'IA (joué uniquement en intro).");
+    // On n'ajoute rien au payload concernant l'audio
+  }
+
   try {
     const response = await fetch(`${API_BASE}/generate`, {
       method: 'POST',
@@ -140,22 +174,7 @@ export const generateSunoMusic = async (params: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
-        // Paramètres obligatoires pour cette API spécifique
-        customMode: true,
-        callBackUrl: "https://google.com", // Dummy URL obligatoire
-        instrumental: false,
-        model: 'V3_5', // CORRECTION: Paramètre requis par l'API
-        
-        // Modèle et contenu
-        mv: 'chirp-v3-5', 
-        title: params.title.substring(0, 80),
-        prompt: params.lyrics.substring(0, 2000), 
-        
-        // Style
-        tags: fullStyle,
-        style: fullStyle 
-      })
+      body: JSON.stringify(payload)
     });
 
     if (!response.ok) {

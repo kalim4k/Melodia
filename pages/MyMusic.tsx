@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Song } from '../types';
-import { Play, Pause, MoreHorizontal, Music, Download } from 'lucide-react';
+import { Play, Pause, Music, Download, Share2 } from 'lucide-react';
 
 interface MyMusicProps {
   songs: Song[];
@@ -10,9 +10,23 @@ interface MyMusicProps {
 }
 
 const MyMusic: React.FC<MyMusicProps> = ({ songs, onPlay, currentSongId, isPlaying }) => {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleShare = async (e: React.MouseEvent, songId: string) => {
+    e.stopPropagation();
+    const shareUrl = `${window.location.origin}?share=${songId}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedId(songId);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch (err) {
+      console.error("Failed to copy", err);
+    }
+  };
+
   return (
-    <div className="pb-28 animate-fade-in">
-      <h1 className="text-3xl font-bold text-slate-900 mb-6 tracking-tight">Bibliothèque</h1>
+    <div className="pb-28 animate-fade-in w-full max-w-4xl mx-auto">
+      <h1 className="text-3xl font-bold text-slate-900 mb-6 tracking-tight pt-4">Bibliothèque</h1>
 
       <div className="space-y-3">
         {songs.map((song) => {
@@ -55,14 +69,16 @@ const MyMusic: React.FC<MyMusicProps> = ({ songs, onPlay, currentSongId, isPlayi
               {/* Boutons d'action */}
               <div className="flex items-center gap-1 pr-2">
                  <button 
-                  onClick={() => onPlay(song)}
-                  className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${
-                    isCurrent ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' : 'text-slate-400 hover:bg-slate-50 hover:text-rose-500'
-                  }`}
+                  onClick={(e) => handleShare(e, song.id)}
+                  className="w-10 h-10 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-colors relative"
+                  title="Copier le lien de partage"
                 >
-                  {isActivePlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+                  <Share2 size={20} />
+                  {copiedId === song.id && (
+                     <span className="absolute -top-8 bg-black text-white text-[10px] px-2 py-1 rounded whitespace-nowrap">Copié !</span>
+                  )}
                 </button>
-                
+
                 <a 
                   href={song.audioUrl}
                   download
@@ -70,9 +86,19 @@ const MyMusic: React.FC<MyMusicProps> = ({ songs, onPlay, currentSongId, isPlayi
                   rel="noreferrer"
                   className="w-10 h-10 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                   title="Télécharger"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <Download size={20} />
                 </a>
+
+                 <button 
+                  onClick={() => onPlay(song)}
+                  className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${
+                    isCurrent ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30' : 'text-slate-400 hover:bg-slate-50 hover:text-rose-500'
+                  }`}
+                >
+                  {isActivePlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+                </button>
               </div>
             </div>
           );

@@ -10,6 +10,7 @@ import CoinsPage from './pages/Coins';
 import Profile from './pages/Profile';
 import Auth from './pages/Auth';
 import Landing from './pages/Landing';
+import SharedSong from './pages/SharedSong'; // New import
 import BackgroundAnimation from './components/BackgroundAnimation';
 import PlayerBar from './components/PlayerBar';
 import { NavItem, Song, User } from './types';
@@ -21,6 +22,9 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
   
+  // Share Handling
+  const [sharedSongId, setSharedSongId] = useState<string | null>(null);
+
   // Auth State
   const [showAuth, setShowAuth] = useState(false);
   
@@ -34,6 +38,16 @@ const App: React.FC = () => {
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
 
   useEffect(() => {
+    // 1. Check for share URL
+    const params = new URLSearchParams(window.location.search);
+    const shareId = params.get('share');
+    if (shareId) {
+      setSharedSongId(shareId);
+      setLoadingInitial(false);
+      return; // Stop loading main app logic if sharing
+    }
+
+    // 2. Normal App Load
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
         setSession(session);
@@ -103,10 +117,8 @@ const App: React.FC = () => {
           createdAt: s.created_at,
           duration: s.duration,
           coverImage: s.cover_image,
-          // Mapping des nouveaux champs (assurez-vous d'avoir fait la migration SQL si nécessaire)
-          // Pour l'instant on map sur des champs existants ou on suppose qu'ils existent
-          voiceInput: s.voice_input, // Nouveau champ DB
-          voiceMode: s.voice_mode // Nouveau champ DB
+          voiceInput: s.voice_input, 
+          voiceMode: s.voice_mode as any
         }));
         setSongs(formattedSongs);
       }
@@ -118,8 +130,7 @@ const App: React.FC = () => {
   const handleSongCreated = async (newSong: Song) => {
     if (!session?.user) return;
 
-    // Attention: Il faut s'assurer que la table 'songs' a bien les colonnes 'voice_input' et 'voice_mode'
-    // Si elles n'existent pas encore en base, Supabase ignorera ces champs si on ne les a pas créés.
+    // Tentative d'insertion en base
     const { error } = await supabase.from('songs').insert({
       user_id: session.user.id,
       title: newSong.title,
@@ -134,7 +145,11 @@ const App: React.FC = () => {
       voice_mode: newSong.voiceMode || null
     });
 
-    if (error) console.error("Erreur sauvegarde chanson:", error);
+    if (error) {
+      console.error("Erreur critique sauvegarde chanson:", error);
+      alert(`Erreur de sauvegarde: ${error.message}. Vérifiez que vous avez bien exécuté le script SQL dans Supabase.`);
+      return; 
+    }
 
     setSongs([newSong, ...songs]);
   };
@@ -171,8 +186,6 @@ const App: React.FC = () => {
     } else {
       setCurrentSong(song);
       setIsPlaying(true);
-      // Optionnel : Ouvrir le lecteur en plein écran automatiquement au lancement d'une nouvelle musique
-      // setIsPlayerExpanded(true); 
     }
   };
 
@@ -228,12 +241,28 @@ const App: React.FC = () => {
 
   if (loadingInitial) return <div className="h-screen w-full flex items-center justify-center bg-slate-50 text-rose-500">Chargement...</div>;
 
+  // ROUTE 1: Shared Song Page (Public)
+  if (sharedSongId) {
+    return (
+      <SharedSong 
+        songId={sharedSongId} 
+        onGoHome={() => {
+           // Clear URL param to go back to main app
+           window.history.pushState({}, '', window.location.pathname);
+           setSharedSongId(null);
+        }} 
+      />
+    );
+  }
+
+  // ROUTE 2: Landing Page (Unauthenticated)
   if (!session) {
     if (showAuth) return <Auth onBack={() => setShowAuth(false)} />;
     return <Landing onStart={() => setShowAuth(true)} />;
   }
 
-  const mainMargin = !isMobile ? (isSidebarCollapsed ? 'ml-20' : 'ml-72') : '';
+  // ROUTE 3: Main App (Authenticated)
+  const sidebarMarginClass = isSidebarCollapsed ? 'md:ml-20' : 'md:ml-72';
 
   return (
     <div className="min-h-screen bg-slate-50 flex relative overflow-hidden">
@@ -246,7 +275,7 @@ const App: React.FC = () => {
         toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
       
-      <main className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ease-in-out z-10 ${mainMargin}`}>
+      <main className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ease-in-out z-10 w-full ${sidebarMarginClass}`}>
         {user && <Header user={user} title={getPageTitle()} />}
         <div className="flex-1 px-4 md:px-8 pt-6 max-w-7xl mx-auto w-full relative pb-32">
           {renderContent()}
