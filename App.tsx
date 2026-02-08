@@ -127,11 +127,11 @@ const App: React.FC = () => {
         let coinsToAdd = statusData?.meta?.coinAmount || 0;
         const paidAmount = statusData?.customerPrice || statusData?.cart?.customerPrice || 0;
 
-        // Fallback montant (Mise à jour pour le test à 1000 FCFA)
+        // Fallback montant (Remis à la normale)
         if (!coinsToAdd && paidAmount > 0) {
             if (paidAmount >= 9000) coinsToAdd = 300;
             else if (paidAmount >= 3500) coinsToAdd = 100;
-            else if (paidAmount >= 1000) coinsToAdd = 50; // Seuil abaissé pour le test
+            else if (paidAmount >= 2000) coinsToAdd = 50; 
         }
 
         if (finalStatus === 'COMPLETED') {

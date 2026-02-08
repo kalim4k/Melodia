@@ -9,7 +9,7 @@ const CoinsPage: React.FC<{ user: User }> = ({ user }) => {
   const [error, setError] = useState<string | null>(null);
 
   const packs = [
-    { amount: 50, price: 1000, label: '1 000 FCFA', popular: false, color: 'from-slate-700 to-slate-900' }, // PRIX TEST
+    { amount: 50, price: 2500, label: '2 500 FCFA', popular: false, color: 'from-slate-700 to-slate-900' },
     { amount: 100, price: 4000, label: '4 000 FCFA', popular: true, color: 'from-rose-500 to-rose-600' },
     { amount: 300, price: 10000, label: '10 000 FCFA', popular: false, color: 'from-blue-600 to-indigo-700' },
   ];
