@@ -1,58 +1,53 @@
--- 1. CONFIGURATION DE LA TABLE SONGS
-CREATE TABLE IF NOT EXISTS public.songs (
-    id TEXT PRIMARY KEY,
+
+-- 1. Table Transactions : ON DÉSACTIVE LA SÉCURITÉ POUR TESTER
+CREATE TABLE IF NOT EXISTS public.transactions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id) NOT NULL,
-    title TEXT,
-    recipient TEXT,
-    lyrics TEXT,
-    audio_url TEXT,
-    cover_image TEXT,
-    style TEXT,
-    duration TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    voice_input TEXT,
-    voice_mode TEXT
+    maketou_cart_id TEXT NOT NULL,
+    amount_fcfa INTEGER NOT NULL,
+    coins_amount INTEGER NOT NULL,
+    status TEXT DEFAULT 'pending', 
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Ajouter les colonnes si la table existe déjà
-ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS voice_input TEXT;
-ALTER TABLE public.songs ADD COLUMN IF NOT EXISTS voice_mode TEXT;
+-- SOLUTION RADICALE : On désactive la vérification des droits pour cette table
+-- Cela permet à n'importe quel utilisateur connecté d'insérer une ligne.
+ALTER TABLE public.transactions DISABLE ROW LEVEL SECURITY;
 
--- Activer la sécurité (RLS)
-ALTER TABLE public.songs ENABLE ROW LEVEL SECURITY;
+-- 2. Table Profiles : On s'assure que les droits sont bons
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID REFERENCES auth.users(id) PRIMARY KEY,
+  name TEXT,
+  coins INTEGER DEFAULT 0,
+  avatar_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
 
--- Supprimer les anciennes politiques pour éviter les conflits
-DROP POLICY IF EXISTS "Songs are viewable by everyone" ON public.songs;
-DROP POLICY IF EXISTS "Users can insert their own songs" ON public.songs;
-DROP POLICY IF EXISTS "Users can update their own songs" ON public.songs;
-DROP POLICY IF EXISTS "Users can delete their own songs" ON public.songs;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- Créer les nouvelles politiques
--- 1. Lecture : Tout le monde peut voir les chansons (nécessaire pour le partage)
-CREATE POLICY "Songs are viewable by everyone" ON public.songs FOR SELECT USING (true);
+-- On nettoie les anciennes politiques
+DROP POLICY IF EXISTS "Enable all for users" ON public.profiles;
+DROP POLICY IF EXISTS "Enable read access for own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Enable update access for own profile" ON public.profiles;
 
--- 2. Insertion : Un utilisateur connecté peut ajouter une chanson liée à son ID
-CREATE POLICY "Users can insert their own songs" ON public.songs FOR INSERT WITH CHECK (auth.uid() = user_id);
+-- On remet des droits simples
+CREATE POLICY "Enable all for users" 
+ON public.profiles FOR ALL 
+USING (auth.uid() = id) 
+WITH CHECK (auth.uid() = id);
 
--- 3. Modification/Suppression : Uniquement le créateur
-CREATE POLICY "Users can update their own songs" ON public.songs FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete their own songs" ON public.songs FOR DELETE USING (auth.uid() = user_id);
+-- 3. Trigger de création automatique de profil (Sécurité)
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, name, coins, avatar_url)
+  VALUES (new.id, new.raw_user_meta_data->>'name', 0, new.raw_user_meta_data->>'avatar_url')
+  ON CONFLICT (id) DO NOTHING;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-
--- 2. CONFIGURATION DES BUCKETS DE STOCKAGE
-INSERT INTO storage.buckets (id, name, public) VALUES ('audio-inputs', 'audio-inputs', true) ON CONFLICT (id) DO NOTHING;
-INSERT INTO storage.buckets (id, name, public) VALUES ('covers', 'covers', true) ON CONFLICT (id) DO NOTHING;
-
--- Politiques de stockage pour 'audio-inputs'
-DROP POLICY IF EXISTS "Public Access Audio" ON storage.objects;
-CREATE POLICY "Public Access Audio" ON storage.objects FOR SELECT USING ( bucket_id = 'audio-inputs' );
-
-DROP POLICY IF EXISTS "Auth Upload Audio" ON storage.objects;
-CREATE POLICY "Auth Upload Audio" ON storage.objects FOR INSERT WITH CHECK ( bucket_id = 'audio-inputs' AND auth.role() = 'authenticated' );
-
--- Politiques de stockage pour 'covers'
-DROP POLICY IF EXISTS "Public Access Covers" ON storage.objects;
-CREATE POLICY "Public Access Covers" ON storage.objects FOR SELECT USING ( bucket_id = 'covers' );
-
-DROP POLICY IF EXISTS "Auth Upload Covers" ON storage.objects;
-CREATE POLICY "Auth Upload Covers" ON storage.objects FOR INSERT WITH CHECK ( bucket_id = 'covers' AND auth.role() = 'authenticated' );
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();

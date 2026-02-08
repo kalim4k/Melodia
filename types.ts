@@ -1,3 +1,4 @@
+
 export interface Song {
   id: string;
   title: string;
@@ -14,6 +15,7 @@ export interface Song {
 
 export interface User {
   name: string;
+  email: string; // Ajouté pour Maketou
   coins: number;
   avatar: string;
   plan: 'gratuit' | 'premium';

@@ -1,20 +1,51 @@
-import React from 'react';
-import { Coins as CoinsIcon, Check, Star } from 'lucide-react';
+
+import React, { useState } from 'react';
+import { Coins as CoinsIcon, Check, Star, Loader2, AlertCircle } from 'lucide-react';
 import { User } from '../types';
+import { initiateMaketouPayment, MAKETOU_PRODUCT_ID } from '../services/maketouService';
 
 const CoinsPage: React.FC<{ user: User }> = ({ user }) => {
+  const [loading, setLoading] = useState<number | null>(null); // Index du pack en chargement
+  const [error, setError] = useState<string | null>(null);
+
   const packs = [
-    { amount: 50, price: '4.99€', popular: false, color: 'from-slate-700 to-slate-900' },
-    { amount: 150, price: '12.99€', popular: true, color: 'from-rose-500 to-rose-600' },
-    { amount: 500, price: '39.99€', popular: false, color: 'from-blue-600 to-indigo-700' },
+    { amount: 50, price: 1000, label: '1 000 FCFA', popular: false, color: 'from-slate-700 to-slate-900' }, // PRIX TEST
+    { amount: 100, price: 4000, label: '4 000 FCFA', popular: true, color: 'from-rose-500 to-rose-600' },
+    { amount: 300, price: 10000, label: '10 000 FCFA', popular: false, color: 'from-blue-600 to-indigo-700' },
   ];
 
+  const handleBuy = async (idx: number, pack: typeof packs[0]) => {
+    if ((MAKETOU_PRODUCT_ID as string) === "REMPLACER_PAR_VOTRE_ID_PRODUIT_MAKETOU") {
+        setError("Configuration manquante : L'ID du produit Maketou n'est pas défini dans le code.");
+        return;
+    }
+
+    setLoading(idx);
+    setError(null);
+
+    try {
+      const redirectUrl = await initiateMaketouPayment(user, pack.price, pack.amount);
+      // Redirection vers la page de paiement
+      window.location.href = redirectUrl;
+    } catch (err: any) {
+      setError(err.message || "Impossible de lancer le paiement.");
+      setLoading(null);
+    }
+  };
+
   return (
-    <div className="pb-28 max-w-4xl mx-auto">
+    <div className="pb-28 max-w-4xl mx-auto animate-fade-in">
       <div className="text-center mb-10 pt-4">
         <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">Boutique</h1>
         <p className="text-slate-500">Solde actuel: <span className="font-bold text-slate-900">{user.coins} pièces</span></p>
       </div>
+
+      {error && (
+        <div className="bg-red-50 text-red-500 p-4 rounded-2xl mb-6 flex items-center gap-2 text-sm font-medium">
+            <AlertCircle size={20} />
+            {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {packs.map((pack, idx) => (
@@ -47,13 +78,21 @@ const CoinsPage: React.FC<{ user: User }> = ({ user }) => {
                  </div>
               </div>
 
-              <button className={`w-full py-4 rounded-xl font-bold transition-all active:scale-95 shadow-lg text-white bg-gradient-to-r ${pack.color}`}>
-                {pack.price}
+              <button 
+                onClick={() => handleBuy(idx, pack)}
+                disabled={loading !== null}
+                className={`w-full py-4 rounded-xl font-bold transition-all active:scale-95 shadow-lg text-white bg-gradient-to-r ${pack.color} flex items-center justify-center gap-2`}
+              >
+                {loading === idx ? <Loader2 className="animate-spin" /> : pack.label}
               </button>
             </div>
           </div>
         ))}
       </div>
+      
+      <p className="text-center text-xs text-slate-400 mt-8">
+        Paiement sécurisé via Maketou. Les crédits sont ajoutés automatiquement après validation.
+      </p>
     </div>
   );
 };
