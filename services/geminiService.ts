@@ -16,10 +16,7 @@ export async function decodeAudioData(
 }
 
 export const generateLyrics = async (params: GenerationParams): Promise<{ title: string; lyrics: string }> => {
-  if (!process.env.API_KEY) {
-    throw new Error("Clé API manquante");
-  }
-
+  // Use process.env.API_KEY directly as per guidelines
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const prompt = `
@@ -56,17 +53,18 @@ export const generateLyrics = async (params: GenerationParams): Promise<{ title:
     const text = response.text;
     if (!text) throw new Error("Réponse vide de l'IA");
     return JSON.parse(text);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erreur lors de la génération des paroles:", error);
+    // On propage l'erreur avec un message clair
+    if (error.message && error.message.includes("API key")) {
+        throw new Error("Clé API invalide ou expirée.");
+    }
     throw error;
   }
 };
 
 export const generateSpeech = async (text: string, voice: 'male' | 'female'): Promise<string> => {
-  if (!process.env.API_KEY) {
-    throw new Error("Clé API manquante");
-  }
-
+  // Use process.env.API_KEY directly as per guidelines
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   // Sélection de la voix basée sur le choix de l'utilisateur
