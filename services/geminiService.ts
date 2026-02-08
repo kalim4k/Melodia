@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GenerationParams } from "../types";
 
@@ -16,8 +17,15 @@ export async function decodeAudioData(
 }
 
 export const generateLyrics = async (params: GenerationParams): Promise<{ title: string; lyrics: string }> => {
-  // Use process.env.API_KEY directly as per guidelines
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // On récupère la clé et on enlève les espaces potentiels (souvent le cas lors d'un copier/coller)
+  const apiKey = (process.env.API_KEY || '').trim();
+
+  if (!apiKey) {
+    throw new Error("Clé API Google manquante. Vérifiez la configuration 'API_KEY' sur Netlify.");
+  }
+
+  // Initialisation avec la clé nettoyée
+  const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `
     Agis comme un compositeur professionnel. Écris les paroles d'une chanson pour la Saint-Valentin.
@@ -56,16 +64,18 @@ export const generateLyrics = async (params: GenerationParams): Promise<{ title:
   } catch (error: any) {
     console.error("Erreur lors de la génération des paroles:", error);
     // On propage l'erreur avec un message clair
-    if (error.message && error.message.includes("API key")) {
-        throw new Error("Clé API invalide ou expirée.");
+    if (error.message && (error.message.includes("API key") || error.status === 400 || error.status === 403)) {
+        throw new Error("Clé API invalide ou expirée. Vérifiez qu'il n'y a pas d'espaces dans votre variable Netlify.");
     }
     throw error;
   }
 };
 
 export const generateSpeech = async (text: string, voice: 'male' | 'female'): Promise<string> => {
-  // Use process.env.API_KEY directly as per guidelines
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // On récupère la clé et on enlève les espaces potentiels
+  const apiKey = (process.env.API_KEY || '').trim();
+
+  const ai = new GoogleGenAI({ apiKey });
 
   // Sélection de la voix basée sur le choix de l'utilisateur
   // Fenrir/Charon = Homme, Kore/Puck/Zephyr = Femme/Neutre

@@ -4,25 +4,31 @@ import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Charge les variables d'environnement basées sur le mode actuel (local .env)
+  // Charge les variables d'environnement locales (.env)
   const env = loadEnv(mode, (process as any).cwd(), '');
 
-  // Log pour débogage lors du build (visible dans les logs Netlify)
-  console.log("Build Environment Check:");
-  console.log("- API_KEY exists:", !!(process.env.API_KEY || env.API_KEY));
-  console.log("- KIE_API_KEY exists:", !!(process.env.KIE_API_KEY || env.KIE_API_KEY));
+  // Fonction pour récupérer une variable en cherchant partout
+  // Priorité : process.env (Netlify) > env (Local .env)
+  const getEnvVar = (name: string) => {
+    return process.env[name] || env[name] || process.env[`VITE_${name}`] || env[`VITE_${name}`] || '';
+  };
+
+  const apiKey = getEnvVar('API_KEY');
+  const kieApiKey = getEnvVar('KIE_API_KEY');
+  const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
+  const supabaseKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
+
+  // Logs sécurisés pour le build (ne montre que les 4 premiers caractères)
+  console.log(`[Build] API_KEY found: ${apiKey ? 'Yes (' + apiKey.substring(0, 4) + '...)' : 'No'}`);
 
   return {
     plugins: [react()],
     define: {
-      // Stratégie de remplacement très permissive :
-      // 1. Cherche dans process.env (CI/CD)
-      // 2. Cherche dans env chargé par Vite (local)
-      // 3. Fallback vide
-      'process.env.API_KEY': JSON.stringify(process.env.API_KEY || env.API_KEY || process.env.VITE_API_KEY || env.VITE_API_KEY || ''),
-      'process.env.KIE_API_KEY': JSON.stringify(process.env.KIE_API_KEY || env.KIE_API_KEY || process.env.VITE_KIE_API_KEY || env.VITE_KIE_API_KEY || ''),
-      'process.env.VITE_SUPABASE_URL': JSON.stringify(process.env.VITE_SUPABASE_URL || env.VITE_SUPABASE_URL || ''),
-      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(process.env.VITE_SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || ''),
+      // Injection explicite des variables pour le client
+      'process.env.API_KEY': JSON.stringify(apiKey),
+      'process.env.KIE_API_KEY': JSON.stringify(kieApiKey),
+      'process.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
+      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseKey),
     },
   };
 });
