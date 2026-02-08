@@ -1,10 +1,16 @@
+
 import { GenerationParams } from "../types";
 
 const API_BASE = "https://api.kie.ai/api/v1";
 
 // CONFIGURATION DE LA CLÉ API
 const getApiKey = () => {
-  return "ffc67aa92b32521540881121dab456dd";
+  // On utilise la variable injectée par Vite
+  const key = process.env.KIE_API_KEY;
+  if (!key) {
+    console.warn("Clé API Suno (Kie) manquante. Vérifiez vos variables d'environnement.");
+  }
+  return key || ""; 
 };
 
 interface SunoGenerateResponse {
@@ -126,6 +132,10 @@ export const generateSunoMusic = async (params: {
 }): Promise<GeneratedMusic> => {
   const apiKey = getApiKey();
   
+  if (!apiKey) {
+    throw new Error("Configuration serveur incomplète : Clé Suno manquante");
+  }
+
   // Construction du style complet (Tags + Genre Vocal)
   const vocalTag = params.voice === 'male' ? 'Male vocals' : 'Female vocals';
   const fullStyle = `${params.style}, ${vocalTag}`;
