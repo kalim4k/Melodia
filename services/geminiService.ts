@@ -16,24 +16,31 @@ export async function decodeAudioData(
   return await audioContext.decodeAudioData(bytes.buffer);
 }
 
+// Fonction utilitaire pour récupérer la clé de manière robuste
+const getApiKey = () => {
+  // 1. Essai via Vite standard
+  let key = import.meta.env.VITE_API_KEY;
+  
+  // 2. Fallback via process.env (injecté par vite.config.ts)
+  if (!key && typeof process !== 'undefined' && process.env) {
+    key = process.env.API_KEY;
+  }
+
+  return (key || '').trim();
+};
+
 export const generateLyrics = async (params: GenerationParams): Promise<{ title: string; lyrics: string }> => {
-  // On récupère la clé et on enlève les espaces potentiels
-  const apiKey = (process.env.API_KEY || '').trim();
+  const apiKey = getApiKey();
 
-  // --- DEBUGGING ---
-  // Ouvrez la console du navigateur (F12) pour voir ceci
-  if (apiKey) {
-    console.log(`[Melodia Debug] API Key présente (commence par : ${apiKey.substring(0, 4)}...)`);
-  } else {
-    console.error("[Melodia Debug] API Key MANQUANTE ou VIDE dans le code client.");
-  }
-  // -----------------
-
+  // --- DIAGNOSTIC ---
   if (!apiKey) {
-    throw new Error("Clé API Google manquante. La variable d'environnement API_KEY n'est pas injectée.");
+    console.error("[Melodia] CLÉ API MANQUANTE. Vérifiez la variable 'API_KEY' dans Netlify.");
+    throw new Error("Configuration manquante : Clé API introuvable. Avez-vous redéployé le site après l'ajout de la clé ?");
+  } else {
+    console.log(`[Melodia] Clé API détectée (début: ${apiKey.substring(0, 4)}...)`);
   }
+  // ------------------
 
-  // Initialisation avec la clé nettoyée
   const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `
@@ -71,24 +78,22 @@ export const generateLyrics = async (params: GenerationParams): Promise<{ title:
     if (!text) throw new Error("Réponse vide de l'IA");
     return JSON.parse(text);
   } catch (error: any) {
-    console.error("Erreur lors de la génération des paroles:", error);
+    console.error("Erreur Gemini:", error);
     
-    // Détection spécifique des erreurs courantes
     if (error.message && (error.message.includes("API key") || error.status === 400 || error.status === 403)) {
-        // C'est ici que l'erreur se produit généralement
-        throw new Error(`Clé API rejetée par Google. 
-        1. Vérifiez que la clé n'a pas d'espace.
-        2. Vérifiez dans Google Cloud Console > "API & Services" > "Credentials" si vous avez des restrictions "HTTP Referrers". Si oui, ajoutez votre domaine Netlify.`);
+        throw new Error(`Erreur d'autorisation Google (403/400).
+        1. Vérifiez que votre clé API n'a pas expiré ou été révoquée.
+        2. Assurez-vous d'avoir ajouté "https://votre-site.netlify.app/*" dans les restrictions "Websites" de la console Google Cloud.
+        3. Si vous venez de changer la clé, attendez 5 minutes.`);
     }
     throw error;
   }
 };
 
 export const generateSpeech = async (text: string, voice: 'male' | 'female'): Promise<string> => {
-  const apiKey = (process.env.API_KEY || '').trim();
+  const apiKey = getApiKey();
   const ai = new GoogleGenAI({ apiKey });
 
-  // Sélection de la voix
   let voiceName = 'Kore'; 
   if (voice === 'male') {
     voiceName = 'Fenrir'; 

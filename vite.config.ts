@@ -2,35 +2,28 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Charge les variables d'environnement locales (.env)
-  const env = loadEnv(mode, (process as any).cwd(), '');
+  // Charge les variables locales pour le dev
+  const env = loadEnv(mode, process.cwd(), '');
 
-  // Fonction pour récupérer une variable en cherchant partout
-  // Priorité : process.env (Netlify) > env (Local .env)
-  const getEnvVar = (name: string) => {
-    return process.env[name] || env[name] || process.env[`VITE_${name}`] || env[`VITE_${name}`] || '';
-  };
+  // Netlify expose les variables dans process.env lors du build.
+  // En local, elles sont dans 'env'.
+  // On cherche 'API_KEY' (nom standard) ou 'VITE_API_KEY' (nom Vite).
+  const rawApiKey = process.env.API_KEY || env.API_KEY || process.env.VITE_API_KEY || env.VITE_API_KEY || '';
+  
+  // Nettoyage de la clé (suppression des espaces invisibles fréquents lors des copier-coller)
+  const finalApiKey = rawApiKey.trim();
 
-  const apiKey = getEnvVar('API_KEY');
-  const kieApiKey = getEnvVar('KIE_API_KEY');
-  const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
-  const supabaseKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
-
-  console.log(`[Build] API_KEY configured: ${apiKey ? 'Yes (Length: ' + apiKey.length + ')' : 'No'}`);
+  console.log(`[Vite Build] API Key detected: ${finalApiKey ? 'YES (Length: ' + finalApiKey.length + ')' : 'NO'}`);
 
   return {
     plugins: [react()],
     define: {
-      // Injection standard
-      'process.env.API_KEY': JSON.stringify(apiKey),
-      'process.env.KIE_API_KEY': JSON.stringify(kieApiKey),
-      'process.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
-      'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseKey),
-      
-      // Fallback de sécurité (Parfois 'process.env' est mal polyfillé)
-      'import.meta.env.VITE_API_KEY': JSON.stringify(apiKey), 
+      // On force l'injection dans une variable globale standard Vite
+      // Cela permet d'accéder à la clé via import.meta.env.VITE_API_KEY n'importe où
+      'import.meta.env.VITE_API_KEY': JSON.stringify(finalApiKey),
+      // Fallback pour le code existant qui utilise process.env
+      'process.env.API_KEY': JSON.stringify(finalApiKey),
     },
   };
 });
