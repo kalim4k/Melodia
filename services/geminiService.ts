@@ -19,14 +19,19 @@ export async function decodeAudioData(
 // Fonction utilitaire pour récupérer la clé de manière robuste
 const getApiKey = () => {
   // 1. Essai via Vite standard
-  let key = import.meta.env.VITE_API_KEY;
+  const viteKey = import.meta.env.VITE_API_KEY;
+  if (viteKey) {
+    console.log("[Melodia Config] Clé trouvée via import.meta.env.VITE_API_KEY");
+    return viteKey.trim();
+  }
   
   // 2. Fallback via process.env (injecté par vite.config.ts)
-  if (!key && typeof process !== 'undefined' && process.env) {
-    key = process.env.API_KEY;
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    console.log("[Melodia Config] Clé trouvée via process.env.API_KEY");
+    return process.env.API_KEY.trim();
   }
 
-  return (key || '').trim();
+  return '';
 };
 
 export const generateLyrics = async (params: GenerationParams): Promise<{ title: string; lyrics: string }> => {
@@ -37,7 +42,7 @@ export const generateLyrics = async (params: GenerationParams): Promise<{ title:
     console.error("[Melodia] CLÉ API MANQUANTE. Vérifiez la variable 'API_KEY' dans Netlify.");
     throw new Error("Configuration manquante : Clé API introuvable. Avez-vous redéployé le site après l'ajout de la clé ?");
   } else {
-    console.log(`[Melodia] Clé API détectée (début: ${apiKey.substring(0, 4)}...)`);
+    console.log(`[Melodia] Clé API utilisée (début: ${apiKey.substring(0, 4)}...)`);
   }
   // ------------------
 
