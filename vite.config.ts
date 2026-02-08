@@ -18,17 +18,19 @@ export default defineConfig(({ mode }) => {
   const supabaseUrl = getEnvVar('VITE_SUPABASE_URL');
   const supabaseKey = getEnvVar('VITE_SUPABASE_ANON_KEY');
 
-  // Logs sécurisés pour le build (ne montre que les 4 premiers caractères)
-  console.log(`[Build] API_KEY found: ${apiKey ? 'Yes (' + apiKey.substring(0, 4) + '...)' : 'No'}`);
+  console.log(`[Build] API_KEY configured: ${apiKey ? 'Yes (Length: ' + apiKey.length + ')' : 'No'}`);
 
   return {
     plugins: [react()],
     define: {
-      // Injection explicite des variables pour le client
+      // Injection standard
       'process.env.API_KEY': JSON.stringify(apiKey),
       'process.env.KIE_API_KEY': JSON.stringify(kieApiKey),
       'process.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl),
       'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(supabaseKey),
+      
+      // Fallback de sécurité (Parfois 'process.env' est mal polyfillé)
+      'import.meta.env.VITE_API_KEY': JSON.stringify(apiKey), 
     },
   };
 });

@@ -17,11 +17,20 @@ export async function decodeAudioData(
 }
 
 export const generateLyrics = async (params: GenerationParams): Promise<{ title: string; lyrics: string }> => {
-  // On récupère la clé et on enlève les espaces potentiels (souvent le cas lors d'un copier/coller)
+  // On récupère la clé et on enlève les espaces potentiels
   const apiKey = (process.env.API_KEY || '').trim();
 
+  // --- DEBUGGING ---
+  // Ouvrez la console du navigateur (F12) pour voir ceci
+  if (apiKey) {
+    console.log(`[Melodia Debug] API Key présente (commence par : ${apiKey.substring(0, 4)}...)`);
+  } else {
+    console.error("[Melodia Debug] API Key MANQUANTE ou VIDE dans le code client.");
+  }
+  // -----------------
+
   if (!apiKey) {
-    throw new Error("Clé API Google manquante. Vérifiez la configuration 'API_KEY' sur Netlify.");
+    throw new Error("Clé API Google manquante. La variable d'environnement API_KEY n'est pas injectée.");
   }
 
   // Initialisation avec la clé nettoyée
@@ -63,24 +72,24 @@ export const generateLyrics = async (params: GenerationParams): Promise<{ title:
     return JSON.parse(text);
   } catch (error: any) {
     console.error("Erreur lors de la génération des paroles:", error);
-    // On propage l'erreur avec un message clair
+    
+    // Détection spécifique des erreurs courantes
     if (error.message && (error.message.includes("API key") || error.status === 400 || error.status === 403)) {
-        throw new Error("Clé API invalide ou expirée. Vérifiez qu'il n'y a pas d'espaces dans votre variable Netlify.");
+        // C'est ici que l'erreur se produit généralement
+        throw new Error(`Clé API rejetée par Google. 
+        1. Vérifiez que la clé n'a pas d'espace.
+        2. Vérifiez dans Google Cloud Console > "API & Services" > "Credentials" si vous avez des restrictions "HTTP Referrers". Si oui, ajoutez votre domaine Netlify.`);
     }
     throw error;
   }
 };
 
 export const generateSpeech = async (text: string, voice: 'male' | 'female'): Promise<string> => {
-  // On récupère la clé et on enlève les espaces potentiels
   const apiKey = (process.env.API_KEY || '').trim();
-
   const ai = new GoogleGenAI({ apiKey });
 
-  // Sélection de la voix basée sur le choix de l'utilisateur
-  // Fenrir/Charon = Homme, Kore/Puck/Zephyr = Femme/Neutre
-  let voiceName = 'Kore'; // Default Female
-  
+  // Sélection de la voix
+  let voiceName = 'Kore'; 
   if (voice === 'male') {
     voiceName = 'Fenrir'; 
   } else {
