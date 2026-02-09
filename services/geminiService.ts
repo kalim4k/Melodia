@@ -16,35 +16,22 @@ export async function decodeAudioData(
   return await audioContext.decodeAudioData(bytes.buffer);
 }
 
-// Fonction utilitaire pour récupérer la clé de manière robuste
+// Fonction utilitaire pour récupérer la clé
 const getApiKey = () => {
-  // 1. Essai via Vite standard
-  const viteKey = import.meta.env.VITE_API_KEY;
-  if (viteKey) {
-    console.log("[Melodia Config] Clé trouvée via import.meta.env.VITE_API_KEY");
-    return viteKey.trim();
+  const key = import.meta.env.VITE_API_KEY;
+  if (!key) {
+    console.error("[Melodia] VITE_API_KEY est introuvable. Vérifiez la configuration Netlify.");
+    return '';
   }
-  
-  // 2. Fallback via process.env (injecté par vite.config.ts)
-  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-    console.log("[Melodia Config] Clé trouvée via process.env.API_KEY");
-    return process.env.API_KEY.trim();
-  }
-
-  return '';
+  return key;
 };
 
 export const generateLyrics = async (params: GenerationParams): Promise<{ title: string; lyrics: string }> => {
   const apiKey = getApiKey();
 
-  // --- DIAGNOSTIC ---
   if (!apiKey) {
-    console.error("[Melodia] CLÉ API MANQUANTE. Vérifiez la variable 'API_KEY' dans Netlify.");
-    throw new Error("Configuration manquante : Clé API introuvable. Avez-vous redéployé le site après l'ajout de la clé ?");
-  } else {
-    console.log(`[Melodia] Clé API utilisée (début: ${apiKey.substring(0, 4)}...)`);
+    throw new Error("Configuration manquante : Clé API Gemini (VITE_API_KEY) introuvable.");
   }
-  // ------------------
 
   const ai = new GoogleGenAI({ apiKey });
   
@@ -86,10 +73,7 @@ export const generateLyrics = async (params: GenerationParams): Promise<{ title:
     console.error("Erreur Gemini:", error);
     
     if (error.message && (error.message.includes("API key") || error.status === 400 || error.status === 403)) {
-        throw new Error(`Erreur d'autorisation Google (403/400).
-        1. Vérifiez que votre clé API n'a pas expiré ou été révoquée.
-        2. Assurez-vous d'avoir ajouté "https://votre-site.netlify.app/*" dans les restrictions "Websites" de la console Google Cloud.
-        3. Si vous venez de changer la clé, attendez 5 minutes.`);
+        throw new Error(`Erreur d'autorisation Google. Vérifiez VITE_API_KEY.`);
     }
     throw error;
   }
