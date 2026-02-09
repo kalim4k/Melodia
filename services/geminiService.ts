@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GenerationParams } from "../types";
 
@@ -16,24 +15,12 @@ export async function decodeAudioData(
   return await audioContext.decodeAudioData(bytes.buffer);
 }
 
-// Fonction utilitaire pour récupérer la clé
-const getApiKey = () => {
-  const key = import.meta.env.VITE_API_KEY;
-  if (!key) {
-    console.error("[Melodia] VITE_API_KEY est introuvable. Vérifiez la configuration Netlify.");
-    return '';
-  }
-  return key;
-};
-
 export const generateLyrics = async (params: GenerationParams): Promise<{ title: string; lyrics: string }> => {
-  const apiKey = getApiKey();
-
-  if (!apiKey) {
-    throw new Error("Configuration manquante : Clé API Gemini (VITE_API_KEY) introuvable.");
+  if (!process.env.API_KEY) {
+    throw new Error("Clé API manquante");
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const prompt = `
     Agis comme un compositeur professionnel. Écris les paroles d'une chanson pour la Saint-Valentin.
@@ -69,21 +56,23 @@ export const generateLyrics = async (params: GenerationParams): Promise<{ title:
     const text = response.text;
     if (!text) throw new Error("Réponse vide de l'IA");
     return JSON.parse(text);
-  } catch (error: any) {
-    console.error("Erreur Gemini:", error);
-    
-    if (error.message && (error.message.includes("API key") || error.status === 400 || error.status === 403)) {
-        throw new Error(`Erreur d'autorisation Google. Vérifiez VITE_API_KEY.`);
-    }
+  } catch (error) {
+    console.error("Erreur lors de la génération des paroles:", error);
     throw error;
   }
 };
 
 export const generateSpeech = async (text: string, voice: 'male' | 'female'): Promise<string> => {
-  const apiKey = getApiKey();
-  const ai = new GoogleGenAI({ apiKey });
+  if (!process.env.API_KEY) {
+    throw new Error("Clé API manquante");
+  }
 
-  let voiceName = 'Kore'; 
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  // Sélection de la voix basée sur le choix de l'utilisateur
+  // Fenrir/Charon = Homme, Kore/Puck/Zephyr = Femme/Neutre
+  let voiceName = 'Kore'; // Default Female
+  
   if (voice === 'male') {
     voiceName = 'Fenrir'; 
   } else {

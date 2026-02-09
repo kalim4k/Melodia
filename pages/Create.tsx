@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { GenerationParams, Song } from '../types';
@@ -302,10 +301,9 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
       const result = await generateLyrics(formData);
       setGeneratedLyricsData(result);
       setCurrentStep('lyrics-review');
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      // AFFICHAGE DE L'ERREUR RÉELLE
-      setError(err.message || "Erreur de connexion. Veuillez réessayer.");
+      setError("Erreur de connexion. Veuillez réessayer.");
     } finally {
       setLoading(false);
     }
@@ -364,9 +362,9 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
       onSongCreated(newSong); 
       setCurrentStep('final-result');
       
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError(err.message || "Erreur lors de la génération musicale. Réessayez plus tard.");
+      setError("Erreur lors de la génération musicale. Réessayez plus tard.");
     } finally {
       setLoading(false);
     }

@@ -1,18 +1,10 @@
-
 import { GenerationParams } from "../types";
 
 const API_BASE = "https://api.kie.ai/api/v1";
 
 // CONFIGURATION DE LA CLÉ API
 const getApiKey = () => {
-  // Lecture standard Vite
-  const key = import.meta.env.VITE_KIE_API_KEY;
-
-  if (!key) {
-    console.warn("Clé API Suno manquante. Vérifiez la variable VITE_KIE_API_KEY dans Netlify.");
-    return "";
-  }
-  return key.trim(); 
+  return "ffc67aa92b32521540881121dab456dd";
 };
 
 interface SunoGenerateResponse {
@@ -58,8 +50,8 @@ const formatDuration = (seconds: number): string => {
 
 async function pollTask(taskId: string): Promise<GeneratedMusic> {
   const apiKey = getApiKey();
-  const maxAttempts = 60; 
-  const interval = 3000; 
+  const maxAttempts = 60; // Environ 3 minutes max
+  const interval = 3000; // 3 secondes
 
   console.log(`[Suno] Démarrage du polling pour la tâche: ${taskId}`);
 
@@ -80,6 +72,7 @@ async function pollTask(taskId: string): Promise<GeneratedMusic> {
 
         const json: SunoTaskResponse = await response.json();
         
+        // Log de progression tous les 3 appels
         if (i % 3 === 0) console.log(`[Suno] Statut polling (${i}):`, json.data?.status);
 
         if (json.code !== 200) {
@@ -128,39 +121,51 @@ export const generateSunoMusic = async (params: {
   style: string;
   title: string;
   voice: 'male' | 'female';
-  audioInput?: string; 
+  audioInput?: string; // URL de l'audio pour inspiration
   voiceMode?: 'dedication' | 'inspiration';
 }): Promise<GeneratedMusic> => {
   const apiKey = getApiKey();
   
-  if (!apiKey) {
-    throw new Error("Clé Suno manquante (VITE_KIE_API_KEY).");
-  }
-
+  // Construction du style complet (Tags + Genre Vocal)
   const vocalTag = params.voice === 'male' ? 'Male vocals' : 'Female vocals';
   const fullStyle = `${params.style}, ${vocalTag}`;
 
   console.log("[Suno] Envoi de la requête de génération...", {
     style: fullStyle,
-    title: params.title
+    title: params.title,
+    hasAudioInput: !!params.audioInput,
+    voiceMode: params.voiceMode
   });
   
   const payload: any = {
     customMode: true,
-    callBackUrl: "https://google.com", 
+    callBackUrl: "https://google.com", // Dummy URL obligatoire
     instrumental: false,
     model: 'V3_5', 
+    
+    // Modèle et contenu
     mv: 'chirp-v3-5', 
     title: params.title.substring(0, 80),
     prompt: params.lyrics.substring(0, 2000), 
+    
+    // Style
     tags: fullStyle,
     style: fullStyle 
   };
 
+  // LOGIQUE CRITIQUE :
+  // 1. DEDICATION : On n'envoie PAS l'audio à Suno. Le frontend le jouera avant la chanson.
+  // 2. INSPIRATION : On envoie l'audio à Suno pour qu'il s'en inspire (continue_clip / audio_prompt).
+  
   if (params.voiceMode === 'inspiration' && params.audioInput) {
-    console.log("[Suno] Mode Inspiration activé");
+    console.log("[Suno] Mode Inspiration activé : Utilisation de l'audio comme prompt.");
     payload.audio_prompt_url = params.audioInput;
-  } 
+    // continue_at indique à Suno où commencer à générer après le prompt. 
+    // Si absent, Suno gère généralement l'extension intelligemment.
+  } else if (params.voiceMode === 'dedication' && params.audioInput) {
+    console.log("[Suno] Mode Dédicace : L'audio est ignoré par l'IA (joué uniquement en intro).");
+    // On n'ajoute rien au payload concernant l'audio
+  }
 
   try {
     const response = await fetch(`${API_BASE}/generate`, {
@@ -175,7 +180,7 @@ export const generateSunoMusic = async (params: {
     if (!response.ok) {
         const errorText = await response.text();
         console.error("[Suno] Erreur HTTP Initiale:", response.status, errorText);
-        throw new Error(`Erreur serveur Suno (${response.status})`);
+        throw new Error(`Erreur serveur Suno (${response.status}) : ${errorText}`);
     }
 
     const json: SunoGenerateResponse = await response.json();
@@ -185,6 +190,7 @@ export const generateSunoMusic = async (params: {
       throw new Error(json.msg || "Erreur API lors de l'initialisation");
     }
 
+    console.log("[Suno] Tâche créée avec succès, ID:", json.data.taskId);
     return pollTask(json.data.taskId);
 
   } catch (err: any) {
