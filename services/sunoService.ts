@@ -6,7 +6,7 @@ const API_BASE = "https://api.kie.ai/api/v1";
 // CONFIGURATION DE LA CLÉ API
 const getApiKey = () => {
   // On utilise la variable injectée par Vite
-  const key = process.env.KIE_API_KEY;
+  const key =ffc67aa92b32521540881121dab456dd;
   if (!key) {
     console.warn("Clé API Suno (Kie) manquante. Vérifiez vos variables d'environnement.");
   }
