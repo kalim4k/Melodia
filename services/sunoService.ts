@@ -1,13 +1,19 @@
 
 import { GenerationParams } from "../types";
 
-const API_BASE = "https://api.kie.ai/api/v1";
+// URL mise à jour selon votre documentation
+const API_BASE = "https://kieai.erweima.ai/api/v1";
 
 // CONFIGURATION DE LA CLÉ API
 const getApiKey = () => {
-  const key = import.meta.env.VITE_KIE_API_KEY;
+  let key = typeof __VITE_KIE_API_KEY__ !== 'undefined' ? __VITE_KIE_API_KEY__ : '';
+  
+  if (!key || key === "undefined") {
+      key = "ffc67aa92b32521540881121dab456dd"; 
+  }
+  
   if (!key) {
-      console.error("Clé API Suno manquante (VITE_KIE_API_KEY)");
+      console.error("Clé API Suno/Kie manquante. Vérifiez votre fichier .env ou le service.");
       return "";
   }
   return key;
@@ -48,56 +54,48 @@ export interface GeneratedMusic {
   title: string;
 }
 
+export interface GeneratedLyrics {
+  title: string;
+  lyrics: string;
+}
+
 const formatDuration = (seconds: number): string => {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
-async function pollTask(taskId: string): Promise<GeneratedMusic> {
+// Polling pour la MUSIQUE uniquement (Suno est asynchrone)
+async function pollMusicTask(taskId: string): Promise<GeneratedMusic> {
   const apiKey = getApiKey();
-  const maxAttempts = 60; // Environ 3 minutes max
-  const interval = 3000; // 3 secondes
+  const maxAttempts = 60; // 3 min
+  const interval = 3000;
 
-  console.log(`[Suno] Démarrage du polling pour la tâche: ${taskId}`);
+  console.log(`[Kie.ai] Polling Music task: ${taskId}`);
 
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(resolve => setTimeout(resolve, interval));
 
     try {
         const response = await fetch(`${API_BASE}/generate/record-info?taskId=${taskId}`, {
-            headers: {
-                'Authorization': `Bearer ${apiKey}`
-            }
+            headers: { 'Authorization': `Bearer ${apiKey}` }
         });
 
-        if (!response.ok) {
-           console.warn(`[Suno] Erreur HTTP polling: ${response.status}`);
-           continue;
-        }
-
+        if (!response.ok) continue;
         const json: SunoTaskResponse = await response.json();
         
-        // Log de progression tous les 3 appels
-        if (i % 3 === 0) console.log(`[Suno] Statut polling (${i}):`, json.data?.status);
-
-        if (json.code !== 200) {
-           console.warn("[Suno] Erreur API polling code:", json.msg);
-           continue;
-        }
-
-        const status = json.data.status;
+        // Certains endpoints renvoient directement la data, d'autres encapsulés
+        // On gère les structures standard Suno API wrappers
+        const status = json.data?.status;
         
-        // Succès
+        // SUCCÈS
         if (status === 'SUCCESS' || status === 'FIRST_SUCCESS') {
-            const tracks = json.data.response?.sunoData;
+            const data = json.data?.response;
+            const tracks = data?.sunoData;
             
             if (tracks && tracks.length > 0) {
                 const track = tracks[0];
                 if (!track.audioUrl) continue;
-
-                console.log("[Suno] Génération réussie !", track);
-
                 return {
                     audioUrl: track.audioUrl,
                     coverImage: track.imageUrl || 'https://picsum.photos/400/400',
@@ -107,68 +105,119 @@ async function pollTask(taskId: string): Promise<GeneratedMusic> {
             }
         }
         
-        // Echecs
-        if (['CREATE_TASK_FAILED', 'GENERATE_AUDIO_FAILED', 'CALLBACK_EXCEPTION', 'SENSITIVE_WORD_ERROR'].includes(status)) {
-            const errorMsg = json.data.errorMessage || "Erreur inconnue";
-            console.error("[Suno] Échec critique:", errorMsg);
-            throw new Error(`Échec de la génération : ${errorMsg}`);
+        // ECHECS
+        if (['FAILED', 'ERROR', 'CREATE_TASK_FAILED', 'GENERATE_AUDIO_FAILED', 'CALLBACK_EXCEPTION', 'SENSITIVE_WORD_ERROR'].includes(status)) {
+            const errorMsg = json.data?.errorMessage || "Erreur inconnue";
+            throw new Error(`Échec de la génération musicale : ${errorMsg}`);
         }
         
     } catch (e: any) {
-        if (e.message && e.message.includes("Échec de la génération")) throw e;
-        console.warn(`[Suno] Erreur réseau polling (${i}):`, e);
+        if (e.message && e.message.includes("Échec")) throw e;
     }
   }
-  throw new Error("Le serveur met trop de temps à répondre. Veuillez réessayer.");
+  throw new Error(`Le serveur met trop de temps à répondre pour la musique.`);
 }
 
+// 1. Génération de paroles via Kie AI LLM (Endpoint Chat Completions)
+export const generateSunoLyrics = async (prompt: string): Promise<GeneratedLyrics> => {
+    const apiKey = getApiKey();
+    if (!apiKey) throw new Error("Clé API manquante.");
+
+    console.log("[Kie.ai] Envoi prompt paroles (LLM deepseek-chat)...", prompt);
+
+    try {
+        const response = await fetch(`${API_BASE}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: "deepseek-chat", // Modèle indiqué dans votre documentation
+                messages: [
+                    {
+                        role: "system", 
+                        content: "Tu es un parolier expert pour la Saint-Valentin. Génère des paroles de chanson structurées (Couplets, Refrain) basées sur la demande. La première ligne doit être le TITRE de la chanson uniquement. Le reste doit être les paroles. Écris en Français sauf demande contraire."
+                    },
+                    {
+                        role: "user",
+                        content: prompt
+                    }
+                ],
+                max_tokens: 1000,
+                stream: false
+            })
+        });
+
+        if (!response.ok) {
+            const txt = await response.text();
+            throw new Error(`Erreur API LLM (${response.status}): ${txt}`);
+        }
+
+        const json = await response.json();
+        const content = json.choices?.[0]?.message?.content;
+
+        if (!content) throw new Error("L'IA n'a renvoyé aucun texte.");
+
+        // Parsing : Première ligne = Titre, Reste = Paroles
+        const lines = content.split('\n');
+        let title = "Chanson d'Amour";
+        let lyrics = content;
+
+        if (lines.length > 0) {
+            const firstLine = lines[0].trim();
+            // Nettoyage basique du titre
+            title = firstLine.replace(/^Titre\s*:?\s*/i, '').replace(/^"|"$/g, '').replace(/^\*\*|\*\*$/g, '');
+            // On retire la première ligne du contenu pour avoir juste les paroles
+            if (lines.length > 1) {
+                lyrics = lines.slice(1).join('\n').trim();
+            }
+        }
+
+        return {
+            title,
+            lyrics
+        };
+
+    } catch (err: any) {
+        console.error("Erreur generateSunoLyrics:", err);
+        throw err;
+    }
+};
+
+// 2. Génération de musique via Kie AI (Suno model)
 export const generateSunoMusic = async (params: {
   lyrics: string;
   style: string;
   title: string;
   voice: 'male' | 'female';
-  audioInput?: string; // URL de l'audio pour inspiration
+  audioInput?: string; 
   voiceMode?: 'dedication' | 'inspiration';
 }): Promise<GeneratedMusic> => {
   const apiKey = getApiKey();
   
-  if (!apiKey) {
-      throw new Error("Configuration serveur incomplète : Clé Suno manquante.");
-  }
+  if (!apiKey) throw new Error("Clé API manquante.");
   
-  // Construction du style complet (Tags + Genre Vocal)
   const vocalTag = params.voice === 'male' ? 'Male vocals' : 'Female vocals';
   const fullStyle = `${params.style}, ${vocalTag}`;
 
-  console.log("[Suno] Envoi de la requête de génération...", {
-    style: fullStyle,
-    title: params.title,
-    hasAudioInput: !!params.audioInput,
-    voiceMode: params.voiceMode
-  });
+  console.log("[Kie.ai] Envoi prompt musique...", { style: fullStyle });
   
   const payload: any = {
     customMode: true,
-    callBackUrl: "https://google.com", // Dummy URL obligatoire
+    callBackUrl: "https://google.com", 
     instrumental: false,
     model: 'V3_5', 
-    
-    // Modèle et contenu
     mv: 'chirp-v3-5', 
     title: params.title.substring(0, 80),
     prompt: params.lyrics.substring(0, 2000), 
-    
-    // Style
     tags: fullStyle,
     style: fullStyle 
   };
 
   if (params.voiceMode === 'inspiration' && params.audioInput) {
-    console.log("[Suno] Mode Inspiration activé : Utilisation de l'audio comme prompt.");
     payload.audio_prompt_url = params.audioInput;
-  } else if (params.voiceMode === 'dedication' && params.audioInput) {
-    console.log("[Suno] Mode Dédicace : L'audio est ignoré par l'IA (joué uniquement en intro).");
-  }
+  } 
 
   try {
     const response = await fetch(`${API_BASE}/generate`, {
@@ -182,19 +231,22 @@ export const generateSunoMusic = async (params: {
 
     if (!response.ok) {
         const errorText = await response.text();
-        console.error("[Suno] Erreur HTTP Initiale:", response.status, errorText);
-        throw new Error(`Erreur serveur Suno (${response.status}) : ${errorText}`);
+        throw new Error(`Erreur serveur Musique (${response.status}) : ${errorText}`);
     }
 
     const json: SunoGenerateResponse = await response.json();
-
-    if (json.code !== 200) {
-      console.error("[Suno] Erreur Code API:", json);
-      throw new Error(json.msg || "Erreur API lors de l'initialisation");
+    
+    // Vérification du code de retour (parfois 200, parfois pas présent selon le wrapper)
+    if (json.code !== undefined && json.code !== 200) {
+        throw new Error(json.msg || "Erreur inconnue API Musique");
     }
 
-    console.log("[Suno] Tâche créée avec succès, ID:", json.data.taskId);
-    return pollTask(json.data.taskId);
+    // Si data.taskId existe
+    if (json.data && json.data.taskId) {
+        return pollMusicTask(json.data.taskId);
+    } else {
+        throw new Error("Pas de taskId retourné par l'API Musique.");
+    }
 
   } catch (err: any) {
     console.error("Erreur generateSunoMusic:", err);

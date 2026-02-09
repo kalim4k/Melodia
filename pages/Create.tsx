@@ -1,8 +1,8 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { GenerationParams, Song } from '../types';
-import { generateLyrics } from '../services/geminiService';
-import { generateSunoMusic } from '../services/sunoService';
+import { generateSunoLyrics, generateSunoMusic } from '../services/sunoService';
 import { Wand2, Play, Pause, ChevronRight, ChevronLeft, Music, Edit3, Check, Loader2, Download, Image as ImageIcon, Upload, X, Mic, StopCircle, Trash2, Info, Share2 } from 'lucide-react';
 
 interface CreateProps {
@@ -296,14 +296,17 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
 
   const handleGenerateLyrics = async () => {
     setLoading(true);
-    setLoadingText('Écriture des paroles...');
+    setLoadingText('Écriture des paroles avec Kie.ai...');
     try {
-      const result = await generateLyrics(formData);
+      // Construction d'un prompt simple pour Suno/Kie
+      const lyricsPrompt = `A ${formData.vibe} ${formData.musicStyle} song about ${formData.details}. From ${formData.sender} to ${formData.recipient}. Language: French.`;
+      
+      const result = await generateSunoLyrics(lyricsPrompt);
       setGeneratedLyricsData(result);
       setCurrentStep('lyrics-review');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Erreur de connexion. Veuillez réessayer.");
+      setError(`Erreur: ${err.message || "Problème de connexion."}`);
     } finally {
       setLoading(false);
     }
