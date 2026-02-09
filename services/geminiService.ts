@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GenerationParams } from "../types";
 
@@ -16,11 +17,13 @@ export async function decodeAudioData(
 }
 
 export const generateLyrics = async (params: GenerationParams): Promise<{ title: string; lyrics: string }> => {
-  if (!process.env.API_KEY) {
-    throw new Error("Clé API manquante");
+  const apiKey = import.meta.env.VITE_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Clé API manquante. Vérifiez la configuration VITE_API_KEY.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `
     Agis comme un compositeur professionnel. Écris les paroles d'une chanson pour la Saint-Valentin.
@@ -63,14 +66,15 @@ export const generateLyrics = async (params: GenerationParams): Promise<{ title:
 };
 
 export const generateSpeech = async (text: string, voice: 'male' | 'female'): Promise<string> => {
-  if (!process.env.API_KEY) {
-    throw new Error("Clé API manquante");
+  const apiKey = import.meta.env.VITE_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Clé API manquante. Vérifiez la configuration VITE_API_KEY.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
 
   // Sélection de la voix basée sur le choix de l'utilisateur
-  // Fenrir/Charon = Homme, Kore/Puck/Zephyr = Femme/Neutre
   let voiceName = 'Kore'; // Default Female
   
   if (voice === 'male') {
