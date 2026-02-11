@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
@@ -9,6 +8,7 @@ import Create from './pages/Create';
 import MyMusic from './pages/MyMusic';
 import CoinsPage from './pages/Coins';
 import Profile from './pages/Profile';
+import Admin from './pages/Admin';
 import Auth from './pages/Auth';
 import Landing from './pages/Landing';
 import SharedSong from './pages/SharedSong';
@@ -123,44 +123,49 @@ const App: React.FC = () => {
            attempts++;
         }
 
-        // --- ÉTAPE 2 : CALCUL MONTANT ---
+        // --- ÉTAPE 2 : CALCUL MONTANT & PIÈCES ---
         let coinsToAdd = statusData?.meta?.coinAmount || 0;
-        const paidAmount = statusData?.customerPrice || statusData?.cart?.customerPrice || 0;
+        let paidAmount = statusData?.customerPrice || statusData?.cart?.customerPrice || 0;
 
-        // Fallback montant (Remis à la normale)
+        // A. Si on a le prix mais pas les pièces (Fallback inverse)
         if (!coinsToAdd && paidAmount > 0) {
             if (paidAmount >= 9000) coinsToAdd = 300;
             else if (paidAmount >= 3500) coinsToAdd = 100;
             else if (paidAmount >= 2000) coinsToAdd = 50; 
         }
 
+        // B. (CRITIQUE) Si on a les pièces mais pas le prix (API ne renvoie pas toujours le prix)
+        // C'est ici qu'on force le montant pour que les stats Admin soient justes
+        if (paidAmount === 0 && coinsToAdd > 0) {
+            if (coinsToAdd === 50) paidAmount = 2500;
+            else if (coinsToAdd === 100) paidAmount = 4000;
+            else if (coinsToAdd === 300) paidAmount = 10000;
+        }
+
         if (finalStatus === 'COMPLETED') {
              if (coinsToAdd <= 0) {
-                 throw new Error(`Paiement validé mais montant de pièces = 0 (Payé: ${paidAmount}). Contactez le support.`);
+                 throw new Error(`Paiement validé mais montant de pièces = 0. Contactez le support.`);
              }
 
-             setPaymentMessage(`2/4 - Paiement validé (${paidAmount} FCFA). Enregistrement...`);
+             setPaymentMessage(`2/4 - Paiement validé (${paidAmount > 0 ? paidAmount + ' FCFA' : 'Succès'}). Enregistrement...`);
 
-             // --- ÉTAPE 3 : INSERTION TRACE (CRITIQUE) ---
-             // On utilise insert() direct, sans RPC, pour être sûr que ça passe si RLS est désactivé
+             // --- ÉTAPE 3 : INSERTION TRACE (CRITIQUE POUR ADMIN) ---
              const { error: txError } = await supabase.from('transactions').insert({
                 user_id: currentSession.user.id,
                 maketou_cart_id: pendingCartId,
-                amount_fcfa: paidAmount,
+                amount_fcfa: paidAmount, // Maintenant correctement peuplé
                 coins_amount: coinsToAdd,
                 status: 'COMPLETED'
              });
 
              if (txError) {
                  console.error("ERREUR INSERT TRANSACTION:", txError);
-                 // On continue quand même pour créditer l'utilisateur, mais on alerte
                  setPaymentMessage("Attention: Erreur d'historique, mais on crédite votre compte...");
              }
 
              // --- ÉTAPE 4 : CRÉDIT ---
              setPaymentMessage("3/4 - Ajout des pièces...");
              
-             // Récupérer solde actuel pour être sûr
              const { data: profile } = await supabase.from('profiles').select('coins').eq('id', currentSession.user.id).single();
              const newBalance = (profile?.coins || 0) + coinsToAdd;
 
@@ -177,10 +182,8 @@ const App: React.FC = () => {
              setPaymentMessage("4/4 - Terminé ! Redirection...");
              setPaymentStatusType('success');
              
-             // Update Local User
              setUser(prev => prev ? ({...prev, coins: newBalance}) : null);
 
-             // Clear
              localStorage.removeItem('pending_cart_id');
              window.history.replaceState({}, '', window.location.pathname);
              
@@ -194,7 +197,6 @@ const App: React.FC = () => {
         } else if (statusData?.status === 'payment_failed') {
              throw new Error("Paiement refusé ou annulé.");
         } else {
-             // Cas où Maketou ne répond pas "completed" assez vite
              setPaymentStatusType('info');
              setPaymentMessage("Paiement en attente. Cliquez ci-dessous pour forcer la vérification.");
              setShowManualCheck(true);
@@ -310,6 +312,7 @@ const App: React.FC = () => {
       case NavItem.MY_MUSIC: return <MyMusic songs={songs} onPlay={handlePlaySong} currentSongId={currentSong?.id} isPlaying={isPlaying} />;
       case NavItem.COINS: return <CoinsPage user={user} />;
       case NavItem.PROFILE: return <Profile user={user} onLogout={handleLogout} onNavigate={setActiveTab} />;
+      case NavItem.ADMIN: return <Admin onBack={setActiveTab} />;
       default: return null;
     }
   };
@@ -321,6 +324,7 @@ const App: React.FC = () => {
       case NavItem.MY_MUSIC: return 'Mes Musiques';
       case NavItem.COINS: return 'Boutique';
       case NavItem.PROFILE: return 'Profil';
+      case NavItem.ADMIN: return 'Administration';
       default: return 'Melodia';
     }
   };
@@ -388,20 +392,25 @@ const App: React.FC = () => {
   }
 
   const sidebarMarginClass = isSidebarCollapsed ? 'md:ml-20' : 'md:ml-72';
+  const isFullScreen = activeTab === NavItem.ADMIN;
 
   return (
     <div className="min-h-screen bg-slate-50 flex relative overflow-hidden">
       <BackgroundAnimation />
-      <Sidebar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        isMobile={isMobile} 
-        isCollapsed={isSidebarCollapsed}
-        toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-      />
       
-      <main className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ease-in-out z-10 w-full ${sidebarMarginClass}`}>
-        {user && <Header user={user} title={getPageTitle()} />}
+      {/* Cacher Sidebar si mode Admin pour focus */}
+      {!isFullScreen && (
+        <Sidebar 
+            activeTab={activeTab} 
+            setActiveTab={setActiveTab} 
+            isMobile={isMobile} 
+            isCollapsed={isSidebarCollapsed}
+            toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        />
+      )}
+      
+      <main className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ease-in-out z-10 w-full ${!isFullScreen ? sidebarMarginClass : ''}`}>
+        {user && !isFullScreen && <Header user={user} title={getPageTitle()} />}
         
         {paymentMessage && !verifyingPayment && (
             <div className={`mx-6 mt-4 p-4 rounded-2xl shadow-lg animate-fade-in-up flex items-center justify-center font-bold text-center border ${
@@ -412,7 +421,11 @@ const App: React.FC = () => {
             </div>
         )}
 
-        <div className="flex-1 px-4 md:px-8 pt-6 max-w-7xl mx-auto w-full relative pb-32">
+        {/* CONTENEUR PRINCIPAL : 
+            Si ADMIN -> Plein écran (w-full h-full) sans marge/padding
+            Sinon -> Conteneur centré avec padding standard 
+        */}
+        <div className={isFullScreen ? "w-full h-full" : "flex-1 px-4 md:px-8 pt-6 max-w-7xl mx-auto w-full relative pb-32"}>
           {renderContent()}
         </div>
       </main>

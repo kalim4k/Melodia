@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Heart, Loader2, User, ArrowLeft } from 'lucide-react';
@@ -31,7 +32,6 @@ const Auth: React.FC<AuthProps> = ({ onBack }) => {
           options: {
             data: {
               name: name.trim(),
-              // Coins supprimés ici, gérés par le défaut SQL (0)
               avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`
             }
           }

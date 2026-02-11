@@ -1,6 +1,3 @@
-
-/// <reference types="vite/client" />
-
 // Déclaration des constantes globales injectées par Vite
 declare const __VITE_KIE_API_KEY__: string;
 declare const __VITE_SUPABASE_URL__: string;

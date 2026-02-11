@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, NavItem } from '../types';
-import { Settings, LogOut, CreditCard, Bell, ChevronRight, Shield, CircleHelp, ChevronLeft, ToggleLeft, ToggleRight, Moon, Mail, HelpCircle, FileText } from 'lucide-react';
+import { Settings, LogOut, CreditCard, Bell, ChevronRight, Shield, CircleHelp, ChevronLeft, ToggleLeft, ToggleRight, Moon, Mail, HelpCircle, FileText, LayoutDashboard } from 'lucide-react';
 
 interface ProfileProps {
   user: User;
@@ -18,6 +19,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onNavigate }) => {
   const [language, setLanguage] = useState('fr');
 
   const isPremium = user.plan === 'premium';
+  const isAdmin = user.email === 'kalim@gmail.com';
 
   // Formatage de la date d'inscription
   const formattedJoinDate = new Date(user.joinedAt).toLocaleDateString('fr-FR', {
@@ -26,13 +28,10 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onNavigate }) => {
     year: 'numeric'
   });
 
-  // Gestion du Mode Sombre (Effet visuel basique sur le body pour l'instant)
+  // Gestion du Mode Sombre
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
-      // Pour simuler, on change le background du body si nécessaire, 
-      // mais idéalement Tailwind gérerait tout via la classe 'dark'.
-      // Ici on garde l'UI propre à l'app mais on sauvegarde l'état.
     } else {
       document.documentElement.classList.remove('dark');
     }
@@ -214,6 +213,28 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onNavigate }) => {
       </div>
 
       <div className="space-y-6">
+        
+        {/* BOUTON ADMIN */}
+        {isAdmin && (
+           <div className="bg-slate-900 rounded-[1.5rem] overflow-hidden shadow-ios mb-6">
+             <button 
+               onClick={() => onNavigate(NavItem.ADMIN)}
+               className="w-full flex items-center justify-between p-4 pl-5 transition-colors hover:bg-slate-800 text-white"
+             >
+               <div className="flex items-center gap-4">
+                 <div className="w-8 h-8 rounded-lg bg-rose-500 flex items-center justify-center text-white">
+                   <LayoutDashboard size={18} />
+                 </div>
+                 <div className="text-left">
+                    <span className="font-bold block">Espace Admin</span>
+                    <span className="text-xs text-slate-400 font-medium">Statistiques & Revenus</span>
+                 </div>
+               </div>
+               <ChevronRight size={18} className="text-slate-500" />
+             </button>
+           </div>
+        )}
+
         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider pl-4">Général</h3>
         <div className="bg-white rounded-[1.5rem] overflow-hidden shadow-ios">
           {[

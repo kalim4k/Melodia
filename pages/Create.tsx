@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { GenerationParams, Song } from '../types';
 import { generateSunoLyrics, generateSunoMusic } from '../services/sunoService';
-import { Wand2, Play, Pause, ChevronRight, ChevronLeft, Music, Edit3, Check, Loader2, Download, Image as ImageIcon, Upload, X, Mic, StopCircle, Trash2, Info, Share2 } from 'lucide-react';
+import { Wand2, Play, Pause, ChevronRight, ChevronLeft, Music, Edit3, Check, Loader2, Download, Image as ImageIcon, Upload, X, Mic, StopCircle, Trash2, Info, Share2, Film, Video } from 'lucide-react';
 
 interface CreateProps {
   onSongCreated: (song: Song) => void;
@@ -35,9 +35,18 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
 
+  // Video Clip State
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [generatingVideo, setGeneratingVideo] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [senderImage, setSenderImage] = useState<string | null>(null);
+  const [recipientImage, setRecipientImage] = useState<string | null>(null);
+  const [videoProgress, setVideoProgress] = useState(0);
+
   // Audio Player State for Result View
   const audioRef = useRef<HTMLAudioElement>(null);
   const voiceRef = useRef<HTMLAudioElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null); // Ref pour le lecteur vidéo
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingDedication, setPlayingDedication] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -98,6 +107,45 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
   const removeCustomCover = () => {
     setFormData({...formData, customCover: null});
     setCoverFile(null);
+  };
+
+  // --- VIDEO CLIP LOGIC ---
+  const handleClipImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'sender' | 'recipient') => {
+    const file = e.target.files?.[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            if (type === 'sender') setSenderImage(reader.result as string);
+            else setRecipientImage(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+    }
+  };
+
+  const generateVideoClip = () => {
+      if (!senderImage || !recipientImage) {
+          alert("Veuillez ajouter les deux photos pour générer le clip.");
+          return;
+      }
+      
+      setGeneratingVideo(true);
+      setVideoProgress(0);
+
+      // Simulation de chargement de 20s
+      let progress = 0;
+      const interval = setInterval(() => {
+          progress += 5; // 5% toutes les secondes (environ 20s total)
+          setVideoProgress(Math.min(progress, 99));
+          
+          if (progress >= 100) {
+              clearInterval(interval);
+              setVideoUrl("https://celinaroom.com/wp-content/uploads/2026/02/video_2026-02-11_21-02-27.mp4");
+              setGeneratingVideo(false);
+              setShowVideoModal(false);
+              // Pause audio playback if running
+              if (isPlaying) togglePlay();
+          }
+      }, 1000);
   };
 
   // --- AUDIO RECORDING LOGIC ---
@@ -189,7 +237,6 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
 
   // --- RESULT PLAYER LOGIC (With Dedication Support) ---
   
-  // Initialize state when song is generated
   useEffect(() => {
     if (generatedSong && currentStep === 'final-result') {
       const hasDedication = generatedSong.voiceInput && generatedSong.voiceMode === 'dedication';
@@ -198,12 +245,23 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
   }, [generatedSong, currentStep]);
 
   const togglePlay = () => {
+    // Si la vidéo est présente, on joue la vidéo
+    if (videoUrl && videoRef.current) {
+        if (isPlaying) {
+            videoRef.current.pause();
+        } else {
+            videoRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+        return;
+    }
+
+    // Sinon audio normal
     const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
     
     if (activeAudio) {
       if (isPlaying) {
         activeAudio.pause();
-        // Si on est en dédicace, on pause aussi la musique par sécurité
         if (playingDedication && audioRef.current) audioRef.current.pause();
       } else {
         activeAudio.play().catch(e => console.error("Erreur lecture", e));
@@ -213,26 +271,37 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
   };
 
   const handleTimeUpdate = () => {
-    const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
+    let current = 0;
+    let dur = 1;
 
-    if (activeAudio) {
-      const current = activeAudio.currentTime;
-      const dur = activeAudio.duration || 1;
-      setProgress((current / dur) * 100);
-      
-      const mins = Math.floor(current / 60);
-      const secs = Math.floor(current % 60);
-      setCurrentTime(`${mins}:${secs.toString().padStart(2, '0')}`);
-      
-      if (!isNaN(activeAudio.duration)) {
-        const dMins = Math.floor(activeAudio.duration / 60);
-        const dSecs = Math.floor(activeAudio.duration % 60);
-        setDuration(`${dMins}:${dSecs.toString().padStart(2, '0')}`);
-      }
+    // Si vidéo
+    if (videoUrl && videoRef.current) {
+        current = videoRef.current.currentTime;
+        dur = videoRef.current.duration || 1;
+    } 
+    else {
+        // Sinon Audio
+        const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
+        if (activeAudio) {
+            current = activeAudio.currentTime;
+            dur = activeAudio.duration || 1;
+        }
+    }
+
+    setProgress((current / dur) * 100);
+    
+    const mins = Math.floor(current / 60);
+    const secs = Math.floor(current % 60);
+    setCurrentTime(`${mins}:${secs.toString().padStart(2, '0')}`);
+    
+    if (dur && !isNaN(dur)) {
+      const dMins = Math.floor(dur / 60);
+      const dSecs = Math.floor(dur % 60);
+      setDuration(`${dMins}:${dSecs.toString().padStart(2, '0')}`);
     }
   };
 
-  // Transition Dédicace -> Musique
+  // Transition Dédicace -> Musique (Audio uniquement)
   const handleVoiceEnded = () => {
     console.log("Fin de la dédicace, lancement musique...");
     setPlayingDedication(false);
@@ -242,22 +311,20 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
     }
   };
 
-  const handleAudioEnded = () => {
+  const handleMediaEnded = () => {
     setIsPlaying(false);
     setProgress(0);
     setCurrentTime('0:00');
-    // Reset sequence logic for next play
-    const hasDedication = generatedSong?.voiceInput && generatedSong?.voiceMode === 'dedication';
-    if (hasDedication) setPlayingDedication(true);
+    // Reset sequence logic for next play if audio only
+    if (!videoUrl) {
+        const hasDedication = generatedSong?.voiceInput && generatedSong?.voiceMode === 'dedication';
+        if (hasDedication) setPlayingDedication(true);
+    }
   };
 
-  // Fonction de partage
   const handleShare = async () => {
     if (!generatedSong) return;
-    
-    // Création du lien public (basé sur l'URL actuelle + paramètre query)
     const shareUrl = `${window.location.origin}?share=${generatedSong.id}`;
-    
     try {
       await navigator.clipboard.writeText(shareUrl);
       setShowShareTooltip(true);
@@ -298,7 +365,6 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
     setLoading(true);
     setLoadingText('Écriture des paroles avec Kie.ai...');
     try {
-      // Construction d'un prompt simple pour Suno/Kie
       const lyricsPrompt = `A ${formData.vibe} ${formData.musicStyle} song about ${formData.details}. From ${formData.sender} to ${formData.recipient}. Language: French.`;
       
       const result = await generateSunoLyrics(lyricsPrompt);
@@ -411,7 +477,99 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
     const fallbackImage = "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=800&auto=format&fit=crop&q=60";
     
     return (
-      <div className="pb-32 animate-fade-in">
+      <div className="pb-32 animate-fade-in relative">
+        
+        {/* VIDEO MODAL OVERLAY */}
+        {(showVideoModal || generatingVideo) && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="bg-white rounded-[2rem] w-full max-w-md p-6 relative shadow-2xl animate-fade-in-up">
+                    
+                    {generatingVideo ? (
+                        <div className="py-10 text-center">
+                            <div className="w-20 h-20 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-6 relative">
+                                <Loader2 className="text-rose-500 animate-spin" size={40} />
+                                <div className="absolute inset-0 border-4 border-rose-100 rounded-full"></div>
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">Création du clip...</h3>
+                            <p className="text-slate-500 text-sm mb-6">
+                                {videoProgress < 30 ? "Analyse des photos" : videoProgress < 70 ? "Synchronisation audio" : "Finalisation du montage"}
+                            </p>
+                            
+                            {/* Progress Bar */}
+                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden max-w-xs mx-auto">
+                                <div 
+                                    className="h-full bg-rose-500 transition-all duration-300 ease-linear"
+                                    style={{ width: `${videoProgress}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <button 
+                                onClick={() => setShowVideoModal(false)}
+                                className="absolute top-4 right-4 text-slate-400 hover:text-slate-900"
+                            >
+                                <X size={24} />
+                            </button>
+
+                            <h2 className="text-2xl font-bold text-slate-900 mb-2">Générer le clip 🎬</h2>
+                            <p className="text-slate-500 mb-6 text-sm">Ajoutez vos photos pour créer un clip vidéo unique synchronisé avec votre chanson.</p>
+
+                            <div className="flex gap-4 mb-8">
+                                {/* Sender Image */}
+                                <div className="flex-1">
+                                    <label className="block aspect-square rounded-2xl border-2 border-dashed border-slate-200 hover:border-rose-400 hover:bg-rose-50 transition-all cursor-pointer relative overflow-hidden group">
+                                        {senderImage ? (
+                                            <img src={senderImage} alt="Moi" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                                <ImageIcon size={24} className="mb-2" />
+                                                <span className="text-xs font-bold">Ma photo</span>
+                                            </div>
+                                        )}
+                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleClipImageUpload(e, 'sender')} />
+                                        {senderImage && (
+                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Edit3 className="text-white" />
+                                            </div>
+                                        )}
+                                    </label>
+                                </div>
+
+                                {/* Recipient Image */}
+                                <div className="flex-1">
+                                    <label className="block aspect-square rounded-2xl border-2 border-dashed border-slate-200 hover:border-rose-400 hover:bg-rose-50 transition-all cursor-pointer relative overflow-hidden group">
+                                        {recipientImage ? (
+                                            <img src={recipientImage} alt="Destinataire" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                                                <ImageIcon size={24} className="mb-2" />
+                                                <span className="text-xs font-bold">Sa photo</span>
+                                            </div>
+                                        )}
+                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleClipImageUpload(e, 'recipient')} />
+                                        {recipientImage && (
+                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Edit3 className="text-white" />
+                                            </div>
+                                        )}
+                                    </label>
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={generateVideoClip}
+                                className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-transform flex items-center justify-center gap-2"
+                            >
+                                <Film size={20} />
+                                Lancer la création (Gratuit)
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+        )}
+
         <div className="bg-white rounded-[2.5rem] p-6 shadow-ios mb-6 overflow-hidden relative">
           
           <div className="text-center mb-6">
@@ -420,84 +578,162 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
           </div>
 
           <div className="bg-slate-900 rounded-[2rem] p-5 text-white shadow-xl shadow-slate-200">
-            {/* Lecteur Audio Principal */}
-            <audio 
-              ref={audioRef}
-              src={generatedSong.audioUrl}
-              onTimeUpdate={!playingDedication ? handleTimeUpdate : undefined}
-              onEnded={handleAudioEnded}
-              onLoadedMetadata={!playingDedication ? handleTimeUpdate : undefined}
-            />
-            {/* Lecteur Dédicace (Voix) */}
-            {generatedSong.voiceInput && generatedSong.voiceMode === 'dedication' && (
-              <audio 
-                ref={voiceRef}
-                src={generatedSong.voiceInput}
-                onEnded={handleVoiceEnded}
-                onTimeUpdate={playingDedication ? handleTimeUpdate : undefined}
-              />
+            {/* LECTEURS DE MÉDIAS CACHÉS OU AFFICHÉS SELON LE TYPE */}
+            
+            {/* Si Vidéo générée */}
+            {videoUrl ? (
+                <video 
+                    ref={videoRef}
+                    src={videoUrl}
+                    className="hidden" // On utilise le ref mais on affiche via notre UI custom
+                    onTimeUpdate={handleTimeUpdate}
+                    onEnded={handleMediaEnded}
+                />
+            ) : (
+                // Sinon Audio Standard
+                <>
+                    <audio 
+                      ref={audioRef}
+                      src={generatedSong.audioUrl}
+                      onTimeUpdate={!playingDedication ? handleTimeUpdate : undefined}
+                      onEnded={handleMediaEnded}
+                      onLoadedMetadata={!playingDedication ? handleTimeUpdate : undefined}
+                    />
+                    {generatedSong.voiceInput && generatedSong.voiceMode === 'dedication' && (
+                      <audio 
+                        ref={voiceRef}
+                        src={generatedSong.voiceInput}
+                        onEnded={handleVoiceEnded}
+                        onTimeUpdate={playingDedication ? handleTimeUpdate : undefined}
+                      />
+                    )}
+                </>
             )}
 
             <div className="flex items-center gap-4 mb-6">
-              <div className="w-16 h-16 rounded-xl bg-slate-800 overflow-hidden flex-shrink-0 border border-white/10 relative">
-                <img 
-                  src={generatedSong.coverImage || fallbackImage} 
-                  alt="Cover" 
-                  className={`w-full h-full object-cover ${isPlaying ? 'animate-spin-slow' : ''}`} 
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = fallbackImage;
-                  }}
-                />
-                {playingDedication && (
+              {/* VISUEL PRINCIPAL (Vidéo ou Cover) */}
+              <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-slate-800 overflow-hidden flex-shrink-0 border border-white/10 relative group cursor-pointer" onClick={() => videoUrl && setShowVideoModal(true) /* Preview hack or expand */}>
+                
+                {videoUrl ? (
+                    // Si Vidéo
+                    <video 
+                        src={videoUrl} 
+                        className="w-full h-full object-cover" 
+                        muted // Muted preview in thumbnail if wanted, or just static frame
+                    />
+                ) : (
+                    // Si Image
+                    <img 
+                      src={generatedSong.coverImage || fallbackImage} 
+                      alt="Cover" 
+                      className={`w-full h-full object-cover ${isPlaying && !videoUrl ? 'animate-spin-slow' : ''}`} 
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = fallbackImage;
+                      }}
+                    />
+                )}
+
+                {/* Overlays */}
+                {playingDedication && !videoUrl && (
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                     <Mic size={24} className="text-white animate-bounce" />
                   </div>
                 )}
+                {videoUrl && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                        <Video size={24} className="text-white drop-shadow-md" />
+                    </div>
+                )}
               </div>
+
               <div className="flex-1 min-w-0">
                 <h3 className="font-bold text-lg truncate leading-tight">
-                    {playingDedication ? 'Intro Vocale...' : generatedSong.title}
+                    {playingDedication && !videoUrl ? 'Intro Vocale...' : generatedSong.title}
                 </h3>
-                <p className="text-rose-400 text-sm font-medium">{generatedSong.style}</p>
+                <div className="flex items-center gap-2">
+                    <p className="text-rose-400 text-sm font-medium">{generatedSong.style}</p>
+                    {videoUrl && <span className="bg-indigo-500 text-[10px] px-1.5 py-0.5 rounded text-white font-bold">CLIP</span>}
+                </div>
               </div>
             </div>
 
+            {/* Barre de progression */}
+            {/* Si Vidéo, on peut afficher le lecteur vidéo complet en overlay ou remplacer la zone */}
+            {videoUrl && (
+                <div className="aspect-video w-full bg-black rounded-xl mb-6 overflow-hidden relative shadow-lg">
+                    <video 
+                        ref={videoRef}
+                        src={videoUrl}
+                        className="w-full h-full object-contain"
+                        onClick={togglePlay}
+                        onTimeUpdate={handleTimeUpdate}
+                        onEnded={handleMediaEnded}
+                    />
+                     {/* Play overlay for video if paused */}
+                     {!isPlaying && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                            <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-full flex items-center justify-center">
+                                <Play fill="white" className="ml-1 text-white" />
+                            </div>
+                        </div>
+                     )}
+                </div>
+            )}
+
             <div className="mb-2 flex items-center justify-between text-xs text-slate-400 font-medium">
               <span>{currentTime}</span>
-              <span>{playingDedication ? '-' : (duration !== '0:00' ? duration : generatedSong.duration)}</span>
+              <span>{playingDedication && !videoUrl ? '-' : (duration !== '0:00' ? duration : generatedSong.duration)}</span>
             </div>
             
             <div className="relative h-2 bg-white/10 rounded-full overflow-hidden mb-6 cursor-pointer" onClick={(e) => {
-               const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
-               if(activeAudio) {
+               // Gestion seek unifiée
+               let activeMedia: HTMLMediaElement | null = null;
+               if (videoUrl) activeMedia = videoRef.current;
+               else activeMedia = playingDedication ? voiceRef.current : audioRef.current;
+
+               if(activeMedia) {
                  const rect = e.currentTarget.getBoundingClientRect();
                  const x = e.clientX - rect.left;
                  const percent = x / rect.width;
-                 activeAudio.currentTime = percent * (activeAudio.duration || 0);
+                 activeMedia.currentTime = percent * (activeMedia.duration || 0);
                }
             }}>
               <div 
-                className={`absolute top-0 left-0 h-full rounded-full transition-all duration-100 ease-linear ${playingDedication ? 'bg-indigo-500' : 'bg-rose-500'}`}
+                className={`absolute top-0 left-0 h-full rounded-full transition-all duration-100 ease-linear ${playingDedication && !videoUrl ? 'bg-indigo-500' : 'bg-rose-500'}`}
                 style={{ width: `${progress}%` }}
               ></div>
             </div>
 
             <div className="flex items-center justify-between">
+              
+              {/* BOUTON CLIP VIDEO */}
               <div className="relative">
-                <button 
-                    onClick={handleShare}
-                    className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                    title="Partager le lien public"
-                >
-                    <Share2 size={20} />
-                </button>
-                {showShareTooltip && (
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-black text-white text-xs py-1 px-2 rounded whitespace-nowrap">
-                    Lien copié !
-                  </div>
-                )}
+                  {!videoUrl ? (
+                    <button 
+                        onClick={() => setShowVideoModal(true)}
+                        className="h-12 px-4 rounded-full bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2 font-bold text-xs"
+                        title="Créer un clip vidéo"
+                    >
+                        <Film size={18} />
+                        <span className="hidden sm:inline">Clip</span>
+                    </button>
+                  ) : (
+                    <button 
+                        onClick={handleShare}
+                        className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                        title="Partager le clip"
+                    >
+                        <Share2 size={20} />
+                    </button>
+                  )}
+                  {showShareTooltip && (
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-black text-white text-xs py-1 px-2 rounded whitespace-nowrap">
+                        Lien copié !
+                    </div>
+                   )}
               </div>
 
+              {/* Play/Pause Central */}
               <button 
                 onClick={togglePlay}
                 className="w-16 h-16 rounded-full bg-white text-slate-900 flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-white/20"
@@ -506,12 +742,12 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
               </button>
 
               <a 
-                href={generatedSong.audioUrl} 
+                href={videoUrl || generatedSong.audioUrl} 
                 download
                 target="_blank"
                 rel="noreferrer"
                 className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                title="Télécharger MP3 (Musique seule)"
+                title={videoUrl ? "Télécharger Vidéo" : "Télécharger MP3"}
               >
                 <Download size={20} />
               </a>
@@ -537,6 +773,7 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
               setAudioUrl(null);
               setIsPlaying(false);
               setPlayingDedication(false);
+              setVideoUrl(null); // Reset video
             }}
             className="pointer-events-auto bg-slate-900 text-white px-8 py-4 rounded-full font-bold shadow-lg active:scale-95 transition-transform"
           >

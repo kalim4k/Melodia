@@ -27,7 +27,8 @@ export enum NavItem {
   CREATE = 'creer',
   MY_MUSIC = 'mes-musiques',
   COINS = 'pieces',
-  PROFILE = 'profil'
+  PROFILE = 'profil',
+  ADMIN = 'admin'
 }
 
 export interface GenerationParams {
