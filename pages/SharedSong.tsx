@@ -274,12 +274,13 @@ const SharedSong: React.FC<SharedSongProps> = ({ songId, onGoHome }) => {
                 
                 {/* SI VIDEO GENEREE */}
                 {videoUrl ? (
-                    <div className="w-full aspect-video bg-black rounded-xl mb-6 overflow-hidden relative shadow-lg">
+                    <div className="w-full bg-black rounded-xl mb-6 overflow-hidden relative shadow-lg flex justify-center">
                         <video 
                             key={videoUrl}
                             controls
+                            playsInline
                             autoPlay
-                            className="w-full h-full object-contain"
+                            className="w-full h-auto max-h-[75vh] object-contain"
                             src={videoUrl}
                         >
                              Votre navigateur ne supporte pas la lecture de vidéos.
