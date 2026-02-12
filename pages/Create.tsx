@@ -46,7 +46,6 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
   // Audio Player State for Result View
   const audioRef = useRef<HTMLAudioElement>(null);
   const voiceRef = useRef<HTMLAudioElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null); // Ref pour le lecteur vidéo
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingDedication, setPlayingDedication] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -142,8 +141,7 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
               setVideoUrl("https://celinaroom.com/wp-content/uploads/2026/02/video_2026-02-11_21-02-27.mp4");
               setGeneratingVideo(false);
               setShowVideoModal(false);
-              // Pause audio playback if running
-              if (isPlaying) togglePlay();
+              setIsPlaying(false); // Stop audio player if active
           }
       }, 1000);
   };
@@ -245,18 +243,6 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
   }, [generatedSong, currentStep]);
 
   const togglePlay = () => {
-    // Si la vidéo est présente, on joue la vidéo
-    if (videoUrl && videoRef.current) {
-        if (isPlaying) {
-            videoRef.current.pause();
-        } else {
-            videoRef.current.play();
-        }
-        setIsPlaying(!isPlaying);
-        return;
-    }
-
-    // Sinon audio normal
     const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
     
     if (activeAudio) {
@@ -271,37 +257,26 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
   };
 
   const handleTimeUpdate = () => {
-    let current = 0;
-    let dur = 1;
-
-    // Si vidéo
-    if (videoUrl && videoRef.current) {
-        current = videoRef.current.currentTime;
-        dur = videoRef.current.duration || 1;
-    } 
-    else {
-        // Sinon Audio
-        const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
-        if (activeAudio) {
-            current = activeAudio.currentTime;
-            dur = activeAudio.duration || 1;
-        }
-    }
-
-    setProgress((current / dur) * 100);
+    const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
     
-    const mins = Math.floor(current / 60);
-    const secs = Math.floor(current % 60);
-    setCurrentTime(`${mins}:${secs.toString().padStart(2, '0')}`);
-    
-    if (dur && !isNaN(dur)) {
-      const dMins = Math.floor(dur / 60);
-      const dSecs = Math.floor(dur % 60);
-      setDuration(`${dMins}:${dSecs.toString().padStart(2, '0')}`);
+    if (activeAudio) {
+      const current = activeAudio.currentTime;
+      const dur = activeAudio.duration || 1;
+      setProgress((current / dur) * 100);
+
+      const mins = Math.floor(current / 60);
+      const secs = Math.floor(current % 60);
+      setCurrentTime(`${mins}:${secs.toString().padStart(2, '0')}`);
+      
+      if (!isNaN(activeAudio.duration)) {
+        const dMins = Math.floor(activeAudio.duration / 60);
+        const dSecs = Math.floor(activeAudio.duration % 60);
+        setDuration(`${dMins}:${dSecs.toString().padStart(2, '0')}`);
+      }
     }
   };
 
-  // Transition Dédicace -> Musique (Audio uniquement)
+  // Transition Dédicace -> Musique
   const handleVoiceEnded = () => {
     console.log("Fin de la dédicace, lancement musique...");
     setPlayingDedication(false);
@@ -311,15 +286,13 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
     }
   };
 
-  const handleMediaEnded = () => {
+  const handleEnded = () => {
     setIsPlaying(false);
     setProgress(0);
     setCurrentTime('0:00');
-    // Reset sequence logic for next play if audio only
-    if (!videoUrl) {
-        const hasDedication = generatedSong?.voiceInput && generatedSong?.voiceMode === 'dedication';
-        if (hasDedication) setPlayingDedication(true);
-    }
+    // Reset sequence logic for next play
+    const hasDedication = generatedSong?.voiceInput && generatedSong?.voiceMode === 'dedication';
+    if (hasDedication) setPlayingDedication(true);
   };
 
   const handleShare = async () => {
@@ -580,23 +553,27 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
           <div className="bg-slate-900 rounded-[2rem] p-5 text-white shadow-xl shadow-slate-200">
             {/* LECTEURS DE MÉDIAS CACHÉS OU AFFICHÉS SELON LE TYPE */}
             
-            {/* Si Vidéo générée */}
+            {/* Si Vidéo générée, on l'affiche EN GRAND */}
             {videoUrl ? (
-                <video 
-                    ref={videoRef}
-                    src={videoUrl}
-                    className="hidden" // On utilise le ref mais on affiche via notre UI custom
-                    onTimeUpdate={handleTimeUpdate}
-                    onEnded={handleMediaEnded}
-                />
+                <div className="w-full aspect-video bg-black rounded-xl mb-6 overflow-hidden relative shadow-lg">
+                    <video 
+                        key={videoUrl}
+                        controls
+                        autoPlay
+                        className="w-full h-full object-contain"
+                        src={videoUrl}
+                    >
+                         Votre navigateur ne supporte pas la lecture de vidéos.
+                    </video>
+                </div>
             ) : (
-                // Sinon Audio Standard
+                // Sinon Interface Audio Standard
                 <>
                     <audio 
                       ref={audioRef}
                       src={generatedSong.audioUrl}
                       onTimeUpdate={!playingDedication ? handleTimeUpdate : undefined}
-                      onEnded={handleMediaEnded}
+                      onEnded={handleEnded}
                       onLoadedMetadata={!playingDedication ? handleTimeUpdate : undefined}
                     />
                     {generatedSong.voiceInput && generatedSong.voiceMode === 'dedication' && (
@@ -607,115 +584,65 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
                         onTimeUpdate={playingDedication ? handleTimeUpdate : undefined}
                       />
                     )}
+
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-slate-800 overflow-hidden flex-shrink-0 border border-white/10 relative group cursor-pointer">
+                        <img 
+                          src={generatedSong.coverImage || fallbackImage} 
+                          alt="Cover" 
+                          className={`w-full h-full object-cover ${isPlaying ? 'animate-spin-slow' : ''}`} 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = fallbackImage;
+                          }}
+                        />
+                        {playingDedication && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <Mic size={24} className="text-white animate-bounce" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-lg truncate leading-tight">
+                            {playingDedication ? 'Intro Vocale...' : generatedSong.title}
+                        </h3>
+                        <p className="text-rose-400 text-sm font-medium">{generatedSong.style}</p>
+                      </div>
+                    </div>
+
+                    <div className="mb-2 flex items-center justify-between text-xs text-slate-400 font-medium">
+                      <span>{currentTime}</span>
+                      <span>{playingDedication ? '-' : (duration !== '0:00' ? duration : generatedSong.duration)}</span>
+                    </div>
+                    
+                    <div className="relative h-2 bg-white/10 rounded-full overflow-hidden mb-6 cursor-pointer" onClick={(e) => {
+                       const activeAudio = playingDedication ? voiceRef.current : audioRef.current;
+                       if(activeAudio) {
+                         const rect = e.currentTarget.getBoundingClientRect();
+                         const x = e.clientX - rect.left;
+                         const percent = x / rect.width;
+                         activeAudio.currentTime = percent * (activeAudio.duration || 0);
+                       }
+                    }}>
+                      <div 
+                        className={`absolute top-0 left-0 h-full rounded-full transition-all duration-100 ease-linear ${playingDedication ? 'bg-indigo-500' : 'bg-rose-500'}`}
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
                 </>
             )}
 
-            <div className="flex items-center gap-4 mb-6">
-              {/* VISUEL PRINCIPAL (Vidéo ou Cover) */}
-              <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-slate-800 overflow-hidden flex-shrink-0 border border-white/10 relative group cursor-pointer" onClick={() => videoUrl && setShowVideoModal(true) /* Preview hack or expand */}>
-                
-                {videoUrl ? (
-                    // Si Vidéo
-                    <video 
-                        src={videoUrl} 
-                        className="w-full h-full object-cover" 
-                        muted // Muted preview in thumbnail if wanted, or just static frame
-                    />
-                ) : (
-                    // Si Image
-                    <img 
-                      src={generatedSong.coverImage || fallbackImage} 
-                      alt="Cover" 
-                      className={`w-full h-full object-cover ${isPlaying && !videoUrl ? 'animate-spin-slow' : ''}`} 
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = fallbackImage;
-                      }}
-                    />
-                )}
-
-                {/* Overlays */}
-                {playingDedication && !videoUrl && (
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                    <Mic size={24} className="text-white animate-bounce" />
-                  </div>
-                )}
-                {videoUrl && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                        <Video size={24} className="text-white drop-shadow-md" />
-                    </div>
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-lg truncate leading-tight">
-                    {playingDedication && !videoUrl ? 'Intro Vocale...' : generatedSong.title}
-                </h3>
-                <div className="flex items-center gap-2">
-                    <p className="text-rose-400 text-sm font-medium">{generatedSong.style}</p>
-                    {videoUrl && <span className="bg-indigo-500 text-[10px] px-1.5 py-0.5 rounded text-white font-bold">CLIP</span>}
-                </div>
-              </div>
-            </div>
-
-            {/* Barre de progression */}
-            {/* Si Vidéo, on peut afficher le lecteur vidéo complet en overlay ou remplacer la zone */}
-            {videoUrl && (
-                <div className="aspect-video w-full bg-black rounded-xl mb-6 overflow-hidden relative shadow-lg">
-                    <video 
-                        ref={videoRef}
-                        src={videoUrl}
-                        className="w-full h-full object-contain"
-                        onClick={togglePlay}
-                        onTimeUpdate={handleTimeUpdate}
-                        onEnded={handleMediaEnded}
-                    />
-                     {/* Play overlay for video if paused */}
-                     {!isPlaying && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
-                            <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-full flex items-center justify-center">
-                                <Play fill="white" className="ml-1 text-white" />
-                            </div>
-                        </div>
-                     )}
-                </div>
-            )}
-
-            <div className="mb-2 flex items-center justify-between text-xs text-slate-400 font-medium">
-              <span>{currentTime}</span>
-              <span>{playingDedication && !videoUrl ? '-' : (duration !== '0:00' ? duration : generatedSong.duration)}</span>
-            </div>
-            
-            <div className="relative h-2 bg-white/10 rounded-full overflow-hidden mb-6 cursor-pointer" onClick={(e) => {
-               // Gestion seek unifiée
-               let activeMedia: HTMLMediaElement | null = null;
-               if (videoUrl) activeMedia = videoRef.current;
-               else activeMedia = playingDedication ? voiceRef.current : audioRef.current;
-
-               if(activeMedia) {
-                 const rect = e.currentTarget.getBoundingClientRect();
-                 const x = e.clientX - rect.left;
-                 const percent = x / rect.width;
-                 activeMedia.currentTime = percent * (activeMedia.duration || 0);
-               }
-            }}>
-              <div 
-                className={`absolute top-0 left-0 h-full rounded-full transition-all duration-100 ease-linear ${playingDedication && !videoUrl ? 'bg-indigo-500' : 'bg-rose-500'}`}
-                style={{ width: `${progress}%` }}
-              ></div>
-            </div>
-
             <div className="flex items-center justify-between">
               
-              {/* BOUTON CLIP VIDEO */}
+              {/* BOUTON CLIP VIDEO - MODIFIÉ POUR AFFICHER DU TEXTE */}
               <div className="relative">
                   {!videoUrl ? (
                     <button 
                         onClick={() => setShowVideoModal(true)}
-                        className="h-12 px-4 rounded-full bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2 font-bold text-xs"
-                        title="Créer un clip vidéo"
+                        className="h-12 px-5 rounded-full bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center gap-2 font-bold text-xs shadow-sm border border-indigo-500/30"
                     >
                         <Film size={18} />
-                        <span className="hidden sm:inline">Clip</span>
+                        Générer un clip
                     </button>
                   ) : (
                     <button 
@@ -733,13 +660,15 @@ const Create: React.FC<CreateProps> = ({ onSongCreated, deductCoins, onPlay }) =
                    )}
               </div>
 
-              {/* Play/Pause Central */}
-              <button 
-                onClick={togglePlay}
-                className="w-16 h-16 rounded-full bg-white text-slate-900 flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-white/20"
-              >
-                {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" className="ml-1" />}
-              </button>
+              {/* Play/Pause Central (Caché si vidéo active pour laisser les contrôles natifs) */}
+              {!videoUrl && (
+                  <button 
+                    onClick={togglePlay}
+                    className="w-16 h-16 rounded-full bg-white text-slate-900 flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-white/20"
+                  >
+                    {isPlaying ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" className="ml-1" />}
+                  </button>
+              )}
 
               <a 
                 href={videoUrl || generatedSong.audioUrl} 
